@@ -147,7 +147,7 @@ Light:
   m_Enabled: 1
   serializedVersion: 13
   m_Type: 1
-  m_Color: {r: 1, g: 0.95686275, b: 0.8392157, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_Intensity: 1
   m_Range: 10
   m_SpotAngle: 30
@@ -186,7 +186,7 @@ Light:
   m_CullingMask:
     serializedVersion: 2
     m_Bits: 4294967295
-  m_RenderingLayerMask: 1
+  m_RenderingLayerMask: 4294967295
   m_Lightmapping: 4
   m_LightShadowCasterMode: 0
   m_AreaSize: {x: 1, y: 1}
@@ -237,7 +237,7 @@ MonoBehaviour:
   m_SoftShadowQuality: 0
   m_RenderingLayersMask:
     serializedVersion: 0
-    m_Bits: 1
+    m_Bits: 4294967295
   m_ShadowRenderingLayersMask:
     serializedVersion: 0
     m_Bits: 1
@@ -714,8 +714,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MaterialCityTycoon.Building.FurniturePlacementController
   constructionGrid: {fileID: 815535897}
   cellPointer: {fileID: 1556583517}
-  prototypeShelfPrefab: {fileID: 8062735872988391451, guid: c2ad3e6f69620de43a443b92ddb73e6a, type: 3}
-  furnitureTypeId: PrototypeShelf
+  furnitureDefinitions:
+  - {fileID: 11400000, guid: 100ba2357147b4f4287c50172fed04a3, type: 2}
+  - {fileID: 11400000, guid: dbdfcfeeccdd7a345a96199a875d750b, type: 2}
+  - {fileID: 11400000, guid: f117e5bdb80adcd40ba26570853545ad, type: 2}
   occupiedCellMaterial: {fileID: 2100000, guid: e26c1dd9e91008d4e8c1281a70287755, type: 2}
   validPreviewMaterial: {fileID: 2100000, guid: 601999bf082d8754d94a0c5cb47dde1e, type: 2}
   invalidPreviewMaterial: {fileID: 2100000, guid: 963f3c2912fc3c74fb17ee8644241e15, type: 2}
@@ -786,10 +788,10 @@ MonoBehaviour:
   rotationSpeed: 90
   zoomSensitivity: 0.5
   zoomSmoothTime: 0.1
-  minimumOrthographicSize: 5
+  minimumOrthographicSize: 2
   maximumOrthographicSize: 30
   tiltWithZoom: 1
-  nearZoomPitch: 25
+  nearZoomPitch: 20
   farZoomPitch: 60
 --- !u!1 &1311543788
 GameObject:

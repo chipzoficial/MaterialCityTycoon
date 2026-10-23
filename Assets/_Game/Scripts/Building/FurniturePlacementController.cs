@@ -6,7 +6,7 @@ using UnityEngine.InputSystem;
 namespace MaterialCityTycoon.Building
 {
     /// <summary>
-    /// Places one-cell prototype furniture on the currently pointed grid cell.
+    /// Places prototype furniture footprints on the construction grid.
     /// </summary>
     public sealed class FurniturePlacementController : MonoBehaviour
     {
@@ -15,24 +15,25 @@ namespace MaterialCityTycoon.Building
         [Header("References")]
         [SerializeField] private ConstructionGrid constructionGrid;
         [SerializeField] private GridCellPointer cellPointer;
-        [SerializeField] private GameObject prototypeShelfPrefab;
 
-        [Header("Prototype Furniture")]
-        [SerializeField] private string furnitureTypeId = "PrototypeShelf";
+        [Header("Furniture Definitions")]
+        [SerializeField] private List<FurnitureDefinition> furnitureDefinitions = new();
 
         [Header("Placement Preview")]
         [SerializeField] private Material occupiedCellMaterial;
         [SerializeField] private Material validPreviewMaterial;
         [SerializeField] private Material invalidPreviewMaterial;
 
-        private readonly Dictionary<Vector2Int, PlacedFurnitureState> furnitureByCell = new();
+        private readonly Dictionary<string, PlacedFurnitureState> furnitureById = new();
+        private readonly Dictionary<Vector2Int, string> occupancyByCell = new();
         private readonly Dictionary<string, GameObject> visualsByFurnitureId = new();
         private Collider groundCollider;
         private bool placementModeActive;
         private GameObject previewVisual;
+        private FurnitureDefinition previewFurnitureDefinition;
+        private FurnitureDefinition selectedFurnitureDefinition;
         private bool? previewUsesValidMaterial;
         private PlacedFurnitureState movingFurniture;
-        private Vector2Int movingFurnitureOriginCell;
         private int nextFurnitureRotationQuarterTurns;
         private int movingFurnitureRotationQuarterTurns;
 
@@ -40,9 +41,9 @@ namespace MaterialCityTycoon.Building
 
         private void Awake()
         {
-            if (constructionGrid == null || cellPointer == null || prototypeShelfPrefab == null)
+            if (constructionGrid == null || cellPointer == null)
             {
-                Debug.LogError("FurniturePlacementController requires a grid, cell pointer, and prototype shelf prefab.", this);
+                Debug.LogError("FurniturePlacementController requires a grid and cell pointer.", this);
                 enabled = false;
                 return;
             }
@@ -52,7 +53,11 @@ namespace MaterialCityTycoon.Building
             {
                 Debug.LogError("FurniturePlacementController requires a Collider on the grid ground.", this);
                 enabled = false;
+                return;
             }
+
+            ValidateFurnitureDefinitions();
+            SelectFirstValidFurnitureDefinition();
         }
 
         private void Update()
@@ -98,6 +103,11 @@ namespace MaterialCityTycoon.Building
                 TryStartFurnitureMove();
             }
 
+            if (!IsMovingFurniture && keyboard != null)
+            {
+                TrySelectFurnitureDefinitionFromKeyboard(keyboard);
+            }
+
             if (keyboard != null && keyboard.rKey.wasPressedThisFrame)
             {
                 RotatePreview();
@@ -127,19 +137,13 @@ namespace MaterialCityTycoon.Building
 
         private void OnDestroy()
         {
-            if (previewVisual != null)
-            {
-                Destroy(previewVisual);
-            }
+            DestroyPreviewVisual();
         }
 
         private void EnterPlacementMode()
         {
             placementModeActive = true;
-            previewVisual = Instantiate(prototypeShelfPrefab);
-            previewUsesValidMaterial = null;
-            DisablePreviewColliders();
-            previewVisual.SetActive(false);
+            EnsurePreviewVisualForSelectedDefinition();
         }
 
         private void ExitPlacementMode()
@@ -148,25 +152,50 @@ namespace MaterialCityTycoon.Building
             CancelFurnitureMove();
             cellPointer.RestoreIndicatorMaterial();
 
-            if (previewVisual != null)
-            {
-                Destroy(previewVisual);
-                previewVisual = null;
-            }
+            DestroyPreviewVisual();
         }
 
         private void UpdatePlacementPreview()
         {
-            if (!cellPointer.TryGetPointedCell(out Vector2Int cell))
+            if (previewVisual == null)
+            {
+                cellPointer.RestoreIndicatorMaterial();
+                return;
+            }
+
+            if (!cellPointer.TryGetPointedCell(out Vector2Int anchorCell))
             {
                 previewVisual.SetActive(false);
                 return;
             }
 
-            bool isValid = IsCellAvailable(cell, movingFurniture);
+            FurnitureDefinition definition = null;
+            if (!IsMovingFurniture && !TryGetSelectedFurnitureDefinition(out definition))
+            {
+                previewVisual.SetActive(false);
+                cellPointer.RestoreIndicatorMaterial();
+                return;
+            }
+
+            int previewWidth = IsMovingFurniture ? movingFurniture.width : definition.Width;
+            int previewDepth = IsMovingFurniture ? movingFurniture.depth : definition.Depth;
+            int previewRotation = GetPreviewRotationQuarterTurns();
+            string ignoredFurnitureId = IsMovingFurniture ? movingFurniture.id : null;
+            bool isValid = IsFootprintAvailable(
+                anchorCell,
+                previewWidth,
+                previewDepth,
+                previewRotation,
+                ignoredFurnitureId);
+
             cellPointer.SetIndicatorMaterial(isValid ? null : occupiedCellMaterial);
-            SetVisualRotation(previewVisual, GetPreviewRotationQuarterTurns());
-            if (!PositionVisualOnCell(previewVisual, cell))
+            SetVisualRotation(previewVisual, previewRotation);
+            if (!PositionVisualOnFootprint(
+                    previewVisual,
+                    anchorCell,
+                    previewWidth,
+                    previewDepth,
+                    previewRotation))
             {
                 previewVisual.SetActive(false);
                 return;
@@ -178,28 +207,58 @@ namespace MaterialCityTycoon.Building
 
         private bool TryPlaceFurniture()
         {
-            if (!cellPointer.TryGetPointedCell(out Vector2Int cell)
-                || !IsCellAvailable(cell))
+            if (!TryGetSelectedFurnitureDefinition(out FurnitureDefinition definition))
             {
                 return false;
             }
 
-            GameObject visual = Instantiate(prototypeShelfPrefab);
-            SetVisualRotation(visual, nextFurnitureRotationQuarterTurns);
-            if (!PositionVisualOnCell(visual, cell))
+            int rotationQuarterTurns = nextFurnitureRotationQuarterTurns;
+            if (!cellPointer.TryGetPointedCell(out Vector2Int anchorCell)
+                || !IsFootprintAvailable(
+                    anchorCell,
+                    definition.Width,
+                    definition.Depth,
+                    rotationQuarterTurns))
             {
-                Debug.LogError("PrototypeShelf requires a Renderer to align it with the ground.", visual);
-                Destroy(visual);
                 return false;
             }
 
             PlacedFurnitureState furniture = new(
                 Guid.NewGuid().ToString("N"),
-                cell,
-                furnitureTypeId,
-                nextFurnitureRotationQuarterTurns);
-            furnitureByCell.Add(cell, furniture);
+                anchorCell,
+                definition.FurnitureTypeId,
+                definition.Width,
+                definition.Depth,
+                rotationQuarterTurns);
+            GameObject visual = Instantiate(definition.Prefab);
+            SetVisualRotation(visual, rotationQuarterTurns);
+            if (!TryGetVisualBounds(visual, out _))
+            {
+                Debug.LogError($"{definition.name} requires a prefab with a Renderer to align it with the ground.", visual);
+                Destroy(visual);
+                return false;
+            }
+
+            if (!TryRegisterFurniture(furniture))
+            {
+                Destroy(visual);
+                return false;
+            }
+
             visualsByFurnitureId.Add(furniture.id, visual);
+            if (!PositionVisualOnFootprint(
+                    visual,
+                    anchorCell,
+                    furniture.width,
+                    furniture.depth,
+                    furniture.rotationQuarterTurns))
+            {
+                visualsByFurnitureId.Remove(furniture.id);
+                UnregisterFurniture(furniture);
+                Destroy(visual);
+                return false;
+            }
+
             visual.name = $"{furniture.typeId}_{furniture.id}";
             return true;
         }
@@ -207,12 +266,13 @@ namespace MaterialCityTycoon.Building
         private bool TryRemoveFurniture()
         {
             if (!cellPointer.TryGetPointedCell(out Vector2Int cell)
-                || !furnitureByCell.TryGetValue(cell, out PlacedFurnitureState furniture))
+                || !occupancyByCell.TryGetValue(cell, out string furnitureId)
+                || !furnitureById.TryGetValue(furnitureId, out PlacedFurnitureState furniture))
             {
                 return false;
             }
 
-            furnitureByCell.Remove(cell);
+            UnregisterFurniture(furniture);
 
             if (visualsByFurnitureId.TryGetValue(furniture.id, out GameObject visual))
             {
@@ -230,7 +290,8 @@ namespace MaterialCityTycoon.Building
         private bool TryStartFurnitureMove()
         {
             if (!cellPointer.TryGetPointedCell(out Vector2Int cell)
-                || !furnitureByCell.TryGetValue(cell, out PlacedFurnitureState furniture)
+                || !occupancyByCell.TryGetValue(cell, out string furnitureId)
+                || !furnitureById.TryGetValue(furnitureId, out PlacedFurnitureState furniture)
                 || !visualsByFurnitureId.TryGetValue(furniture.id, out GameObject visual)
                 || visual == null)
             {
@@ -238,47 +299,52 @@ namespace MaterialCityTycoon.Building
             }
 
             movingFurniture = furniture;
-            movingFurnitureOriginCell = cell;
             movingFurnitureRotationQuarterTurns = furniture.rotationQuarterTurns;
+            ReplacePreviewVisual(visual);
             return true;
         }
 
         private bool TryConfirmFurnitureMove()
         {
             if (movingFurniture == null
-                || !cellPointer.TryGetPointedCell(out Vector2Int destination)
-                || !IsCellAvailable(destination, movingFurniture)
-                || !furnitureByCell.TryGetValue(movingFurnitureOriginCell, out PlacedFurnitureState furniture)
+                || !cellPointer.TryGetPointedCell(out Vector2Int destinationAnchor)
+                || !furnitureById.TryGetValue(movingFurniture.id, out PlacedFurnitureState furniture)
                 || furniture != movingFurniture
                 || !visualsByFurnitureId.TryGetValue(movingFurniture.id, out GameObject visual)
-                || visual == null)
+                || visual == null
+                || !IsFootprintAvailable(
+                    destinationAnchor,
+                    movingFurniture.width,
+                    movingFurniture.depth,
+                    movingFurnitureRotationQuarterTurns,
+                    movingFurniture.id)
+                || !TryGetVisualBounds(visual, out _))
             {
                 return false;
             }
 
-            if (!TryGetVisualBounds(visual, out _))
-            {
-                return false;
-            }
-
+            Vector2Int originalAnchor = movingFurniture.anchorCell;
+            int originalFurnitureRotation = movingFurniture.rotationQuarterTurns;
             Vector3 originalPosition = visual.transform.position;
-            Quaternion originalRotation = visual.transform.rotation;
+            Quaternion originalVisualRotation = visual.transform.rotation;
+            ApplyFurniturePlacement(
+                movingFurniture,
+                destinationAnchor,
+                movingFurnitureRotationQuarterTurns);
             SetVisualRotation(visual, movingFurnitureRotationQuarterTurns);
-            if (!PositionVisualOnCell(visual, destination))
+            if (!PositionVisualOnFootprint(
+                    visual,
+                    destinationAnchor,
+                    movingFurniture.width,
+                    movingFurniture.depth,
+                    movingFurnitureRotationQuarterTurns))
             {
+                RestoreFurniturePlacement(movingFurniture, originalAnchor, originalFurnitureRotation);
                 visual.transform.position = originalPosition;
-                visual.transform.rotation = originalRotation;
+                visual.transform.rotation = originalVisualRotation;
                 return false;
             }
 
-            if (destination != movingFurnitureOriginCell)
-            {
-                furnitureByCell.Remove(movingFurnitureOriginCell);
-                furnitureByCell.Add(destination, movingFurniture);
-                movingFurniture.cell = destination;
-            }
-
-            movingFurniture.rotationQuarterTurns = movingFurnitureRotationQuarterTurns;
             CancelFurnitureMove();
             return true;
         }
@@ -287,6 +353,11 @@ namespace MaterialCityTycoon.Building
         {
             movingFurniture = null;
             movingFurnitureRotationQuarterTurns = 0;
+
+            if (placementModeActive)
+            {
+                EnsurePreviewVisualForSelectedDefinition();
+            }
         }
 
         private void RotatePreview()
@@ -307,22 +378,317 @@ namespace MaterialCityTycoon.Building
                 : nextFurnitureRotationQuarterTurns;
         }
 
+        private void TrySelectFurnitureDefinitionFromKeyboard(Keyboard keyboard)
+        {
+            if (keyboard.digit1Key.wasPressedThisFrame)
+            {
+                TrySelectFurnitureDefinition(0);
+            }
+            else if (keyboard.digit2Key.wasPressedThisFrame)
+            {
+                TrySelectFurnitureDefinition(1);
+            }
+            else if (keyboard.digit3Key.wasPressedThisFrame)
+            {
+                TrySelectFurnitureDefinition(2);
+            }
+        }
+
+        private void TrySelectFurnitureDefinition(int index)
+        {
+            if (!TryGetValidFurnitureDefinitionAtIndex(index, out FurnitureDefinition definition))
+            {
+                return;
+            }
+
+            selectedFurnitureDefinition = definition;
+            if (placementModeActive)
+            {
+                EnsurePreviewVisualForSelectedDefinition();
+            }
+        }
+
+        private void SelectFirstValidFurnitureDefinition()
+        {
+            selectedFurnitureDefinition = null;
+
+            for (int index = 0; index < furnitureDefinitions.Count; index++)
+            {
+                if (TryGetValidFurnitureDefinitionAtIndex(index, out FurnitureDefinition definition))
+                {
+                    selectedFurnitureDefinition = definition;
+                    return;
+                }
+            }
+        }
+
+        private bool TryGetSelectedFurnitureDefinition(out FurnitureDefinition definition)
+        {
+            definition = null;
+            if (selectedFurnitureDefinition == null)
+            {
+                return false;
+            }
+
+            int index = furnitureDefinitions.IndexOf(selectedFurnitureDefinition);
+            return index >= 0 && TryGetValidFurnitureDefinitionAtIndex(index, out definition);
+        }
+
+        private bool TryGetValidFurnitureDefinitionAtIndex(int index, out FurnitureDefinition definition)
+        {
+            definition = null;
+            if (index < 0 || index >= furnitureDefinitions.Count)
+            {
+                return false;
+            }
+
+            FurnitureDefinition candidate = furnitureDefinitions[index];
+            if (candidate == null || !candidate.IsValid(out _))
+            {
+                return false;
+            }
+
+            for (int otherIndex = 0; otherIndex < furnitureDefinitions.Count; otherIndex++)
+            {
+                if (otherIndex != index
+                    && furnitureDefinitions[otherIndex] != null
+                    && furnitureDefinitions[otherIndex].FurnitureTypeId == candidate.FurnitureTypeId)
+                {
+                    return false;
+                }
+            }
+
+            definition = candidate;
+            return true;
+        }
+
+        private void ValidateFurnitureDefinitions()
+        {
+            Dictionary<string, int> definitionIndexesById = new();
+
+            for (int index = 0; index < furnitureDefinitions.Count; index++)
+            {
+                FurnitureDefinition definition = furnitureDefinitions[index];
+                if (definition == null)
+                {
+                    Debug.LogWarning($"Furniture definition at index {index} is not assigned.", this);
+                    continue;
+                }
+
+                if (!definition.IsValid(out string validationMessage))
+                {
+                    Debug.LogWarning(
+                        $"Furniture definition '{definition.name}' at index {index} is invalid: {validationMessage}",
+                        this);
+                    continue;
+                }
+
+                if (definitionIndexesById.TryGetValue(definition.FurnitureTypeId, out int firstIndex))
+                {
+                    Debug.LogWarning(
+                        $"Furniture Type Id '{definition.FurnitureTypeId}' is duplicated at indexes {firstIndex} and {index}; both entries are ignored.",
+                        this);
+                    continue;
+                }
+
+                definitionIndexesById.Add(definition.FurnitureTypeId, index);
+            }
+        }
+
+        private void EnsurePreviewVisualForSelectedDefinition()
+        {
+            if (!TryGetSelectedFurnitureDefinition(out FurnitureDefinition definition))
+            {
+                DestroyPreviewVisual();
+                return;
+            }
+
+            if (previewVisual != null && previewFurnitureDefinition == definition)
+            {
+                return;
+            }
+
+            ReplacePreviewVisual(definition.Prefab);
+            previewFurnitureDefinition = definition;
+        }
+
+        private void ReplacePreviewVisual(GameObject source)
+        {
+            DestroyPreviewVisual();
+            previewVisual = Instantiate(source);
+            previewUsesValidMaterial = null;
+            DisablePreviewColliders();
+            previewVisual.SetActive(false);
+        }
+
+        private void DestroyPreviewVisual()
+        {
+            if (previewVisual != null)
+            {
+                Destroy(previewVisual);
+                previewVisual = null;
+            }
+
+            previewFurnitureDefinition = null;
+            previewUsesValidMaterial = null;
+        }
+
         private static int GetNextQuarterTurn(int rotationQuarterTurns)
         {
             return (rotationQuarterTurns + 1) % QuarterTurnCount;
         }
 
-        private bool IsCellAvailable(Vector2Int cell, PlacedFurnitureState ignoredFurniture = null)
+        private bool TryRegisterFurniture(PlacedFurnitureState furniture)
         {
-            return constructionGrid.IsInside(cell)
-                && (!furnitureByCell.TryGetValue(cell, out PlacedFurnitureState occupant)
-                    || occupant == ignoredFurniture);
+            if (furnitureById.ContainsKey(furniture.id)
+                || !IsFootprintAvailable(
+                    furniture.anchorCell,
+                    furniture.width,
+                    furniture.depth,
+                    furniture.rotationQuarterTurns))
+            {
+                return false;
+            }
+
+            furnitureById.Add(furniture.id, furniture);
+            AddFurnitureOccupancy(furniture);
+            return true;
         }
 
-        private bool PositionVisualOnCell(GameObject visual, Vector2Int cell)
+        private void UnregisterFurniture(PlacedFurnitureState furniture)
+        {
+            RemoveFurnitureOccupancy(furniture);
+            furnitureById.Remove(furniture.id);
+        }
+
+        private void ApplyFurniturePlacement(
+            PlacedFurnitureState furniture,
+            Vector2Int anchorCell,
+            int rotationQuarterTurns)
+        {
+            RemoveFurnitureOccupancy(furniture);
+            furniture.anchorCell = anchorCell;
+            furniture.rotationQuarterTurns = rotationQuarterTurns;
+            AddFurnitureOccupancy(furniture);
+        }
+
+        private void RestoreFurniturePlacement(
+            PlacedFurnitureState furniture,
+            Vector2Int anchorCell,
+            int rotationQuarterTurns)
+        {
+            RemoveFurnitureOccupancy(furniture);
+            furniture.anchorCell = anchorCell;
+            furniture.rotationQuarterTurns = rotationQuarterTurns;
+            AddFurnitureOccupancy(furniture);
+        }
+
+        private bool IsFootprintAvailable(
+            Vector2Int anchorCell,
+            int furnitureWidth,
+            int furnitureDepth,
+            int rotationQuarterTurns,
+            string ignoredFurnitureId = null)
+        {
+            foreach (Vector2Int cell in GetOccupiedCells(
+                         anchorCell,
+                         furnitureWidth,
+                         furnitureDepth,
+                         rotationQuarterTurns))
+            {
+                if (!constructionGrid.IsInside(cell)
+                    || (occupancyByCell.TryGetValue(cell, out string occupantId)
+                        && occupantId != ignoredFurnitureId))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private void AddFurnitureOccupancy(PlacedFurnitureState furniture)
+        {
+            foreach (Vector2Int cell in GetOccupiedCells(
+                         furniture.anchorCell,
+                         furniture.width,
+                         furniture.depth,
+                         furniture.rotationQuarterTurns))
+            {
+                occupancyByCell.Add(cell, furniture.id);
+            }
+        }
+
+        private void RemoveFurnitureOccupancy(PlacedFurnitureState furniture)
+        {
+            foreach (Vector2Int cell in GetOccupiedCells(
+                         furniture.anchorCell,
+                         furniture.width,
+                         furniture.depth,
+                         furniture.rotationQuarterTurns))
+            {
+                if (occupancyByCell.TryGetValue(cell, out string occupantId)
+                    && occupantId == furniture.id)
+                {
+                    occupancyByCell.Remove(cell);
+                }
+            }
+        }
+
+        private static IEnumerable<Vector2Int> GetOccupiedCells(
+            Vector2Int anchorCell,
+            int furnitureWidth,
+            int furnitureDepth,
+            int rotationQuarterTurns)
+        {
+            GetFootprintDimensions(
+                furnitureWidth,
+                furnitureDepth,
+                rotationQuarterTurns,
+                out int footprintWidth,
+                out int footprintDepth);
+
+            for (int x = 0; x < footprintWidth; x++)
+            {
+                for (int z = 0; z < footprintDepth; z++)
+                {
+                    yield return new Vector2Int(anchorCell.x + x, anchorCell.y + z);
+                }
+            }
+        }
+
+        private static void GetFootprintDimensions(
+            int furnitureWidth,
+            int furnitureDepth,
+            int rotationQuarterTurns,
+            out int footprintWidth,
+            out int footprintDepth)
+        {
+            if (rotationQuarterTurns % 2 == 0)
+            {
+                footprintWidth = furnitureWidth;
+                footprintDepth = furnitureDepth;
+                return;
+            }
+
+            footprintWidth = furnitureDepth;
+            footprintDepth = furnitureWidth;
+        }
+
+        private bool PositionVisualOnFootprint(
+            GameObject visual,
+            Vector2Int anchorCell,
+            int furnitureWidth,
+            int furnitureDepth,
+            int rotationQuarterTurns)
         {
             float groundHeight = groundCollider.bounds.max.y;
-            visual.transform.position = constructionGrid.GetCellCenter(cell, groundHeight);
+            visual.transform.position = GetFootprintCenter(
+                anchorCell,
+                furnitureWidth,
+                furnitureDepth,
+                rotationQuarterTurns,
+                groundHeight);
 
             if (!TryGetVisualBounds(visual, out Bounds visualBounds))
             {
@@ -331,6 +697,27 @@ namespace MaterialCityTycoon.Building
 
             visual.transform.position += Vector3.up * (groundHeight - visualBounds.min.y);
             return true;
+        }
+
+        private Vector3 GetFootprintCenter(
+            Vector2Int anchorCell,
+            int furnitureWidth,
+            int furnitureDepth,
+            int rotationQuarterTurns,
+            float worldHeight)
+        {
+            GetFootprintDimensions(
+                furnitureWidth,
+                furnitureDepth,
+                rotationQuarterTurns,
+                out int footprintWidth,
+                out int footprintDepth);
+
+            Vector3 anchorCenter = constructionGrid.GetCellCenter(anchorCell, worldHeight);
+            return anchorCenter + new Vector3(
+                (footprintWidth - 1) * constructionGrid.CellSize * 0.5f,
+                0f,
+                (footprintDepth - 1) * constructionGrid.CellSize * 0.5f);
         }
 
         private static void SetVisualRotation(GameObject visual, int rotationQuarterTurns)
@@ -395,19 +782,25 @@ namespace MaterialCityTycoon.Building
         private sealed class PlacedFurnitureState
         {
             public readonly string id;
-            public Vector2Int cell;
+            public Vector2Int anchorCell;
             public readonly string typeId;
+            public readonly int width;
+            public readonly int depth;
             public int rotationQuarterTurns;
 
             public PlacedFurnitureState(
                 string id,
-                Vector2Int cell,
+                Vector2Int anchorCell,
                 string typeId,
+                int width,
+                int depth,
                 int rotationQuarterTurns)
             {
                 this.id = id;
-                this.cell = cell;
+                this.anchorCell = anchorCell;
                 this.typeId = typeId;
+                this.width = width;
+                this.depth = depth;
                 this.rotationQuarterTurns = rotationQuarterTurns;
             }
         }
