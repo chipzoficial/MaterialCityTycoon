@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
+using UnityEngine.Serialization;
 
 namespace MaterialCityTycoon.Camera
 {
@@ -23,9 +24,22 @@ namespace MaterialCityTycoon.Camera
         [SerializeField, Min(0f)] private float rotationSpeed = 90f;
 
         [Header("Orthographic Zoom")]
-        [SerializeField, Min(0f)] private float zoomSpeed = 0.02f;
+        [FormerlySerializedAs("zoomSpeed")]
+        [SerializeField, Min(0f)] private float zoomSensitivity = 0.05f;
+        [SerializeField, Min(0.001f)] private float zoomSmoothTime = 0.15f;
         [SerializeField, Min(0.01f)] private float minimumOrthographicSize = 5f;
         [SerializeField, Min(0.01f)] private float maximumOrthographicSize = 30f;
+
+        [Header("Tilt With Zoom")]
+        [SerializeField] private bool tiltWithZoom = true;
+        [SerializeField, Range(1f, 89f)] private float nearZoomPitch = 35f;
+        [SerializeField, Range(1f, 89f)] private float farZoomPitch = 60f;
+
+        private float targetOrthographicSize;
+        private float zoomVelocity;
+        private Vector3 initialCameraLocalPosition;
+        private Quaternion initialCameraLocalRotation;
+        private float cameraOrbitDistance;
 
         private void Awake()
         {
@@ -45,6 +59,17 @@ namespace MaterialCityTycoon.Camera
             {
                 Debug.LogWarning("IsometricCameraRigController expects an orthographic camera.", targetCamera);
             }
+
+            initialCameraLocalPosition = targetCamera.transform.localPosition;
+            initialCameraLocalRotation = targetCamera.transform.localRotation;
+            cameraOrbitDistance = Mathf.Max(0.01f, initialCameraLocalPosition.magnitude);
+
+            targetOrthographicSize = Mathf.Clamp(
+                targetCamera.orthographicSize,
+                minimumOrthographicSize,
+                maximumOrthographicSize);
+            targetCamera.orthographicSize = targetOrthographicSize;
+            ApplyTiltWithZoom();
         }
 
         private void Update()
@@ -52,6 +77,7 @@ namespace MaterialCityTycoon.Camera
             HandleRotation();
             HandleMovement();
             HandleZoom();
+            ApplyTiltWithZoom();
         }
 
         private void HandleMovement()
@@ -96,30 +122,72 @@ namespace MaterialCityTycoon.Camera
         private void HandleZoom()
         {
             Mouse mouse = Mouse.current;
-            if (mouse == null || targetCamera == null)
+            if (targetCamera == null)
             {
                 return;
             }
 
-            float scrollDelta = mouse.scroll.ReadValue().y;
-            if (Mathf.Approximately(scrollDelta, 0f))
+            if (mouse != null)
             {
-                return;
+                float scrollDelta = mouse.scroll.ReadValue().y;
+                if (!Mathf.Approximately(scrollDelta, 0f))
+                {
+                    targetOrthographicSize = Mathf.Clamp(
+                        targetOrthographicSize - scrollDelta * zoomSensitivity,
+                        minimumOrthographicSize,
+                        maximumOrthographicSize);
+                }
             }
 
-            targetCamera.orthographicSize = Mathf.Clamp(
-                targetCamera.orthographicSize - scrollDelta * zoomSpeed,
+            targetOrthographicSize = Mathf.Clamp(
+                targetOrthographicSize,
                 minimumOrthographicSize,
                 maximumOrthographicSize);
+
+            targetCamera.orthographicSize = Mathf.Clamp(
+                Mathf.SmoothDamp(
+                    targetCamera.orthographicSize,
+                    targetOrthographicSize,
+                    ref zoomVelocity,
+                    zoomSmoothTime),
+                minimumOrthographicSize,
+                maximumOrthographicSize);
+        }
+
+        private void ApplyTiltWithZoom()
+        {
+            if (!tiltWithZoom)
+            {
+                targetCamera.transform.localPosition = initialCameraLocalPosition;
+                targetCamera.transform.localRotation = initialCameraLocalRotation;
+                return;
+            }
+
+            float zoomProgress = Mathf.InverseLerp(
+                minimumOrthographicSize,
+                maximumOrthographicSize,
+                targetCamera.orthographicSize);
+            float pitch = Mathf.Lerp(nearZoomPitch, farZoomPitch, zoomProgress);
+            Vector3 preservedEulerAngles = initialCameraLocalRotation.eulerAngles;
+            Quaternion localRotation = Quaternion.Euler(
+                pitch,
+                preservedEulerAngles.y,
+                preservedEulerAngles.z);
+
+            targetCamera.transform.localRotation = localRotation;
+            targetCamera.transform.localPosition = -(localRotation * Vector3.forward) * cameraOrbitDistance;
         }
 
         private void OnValidate()
         {
             movementSpeed = Mathf.Max(0f, movementSpeed);
             rotationSpeed = Mathf.Max(0f, rotationSpeed);
-            zoomSpeed = Mathf.Max(0f, zoomSpeed);
+            zoomSensitivity = Mathf.Max(0f, zoomSensitivity);
+            zoomSmoothTime = Mathf.Max(0.001f, zoomSmoothTime);
             minimumOrthographicSize = Mathf.Max(0.01f, minimumOrthographicSize);
             maximumOrthographicSize = Mathf.Max(minimumOrthographicSize, maximumOrthographicSize);
+            nearZoomPitch = Mathf.Clamp(nearZoomPitch, 1f, 89f);
+            farZoomPitch = Mathf.Clamp(farZoomPitch, 1f, 89f);
 
             if (xLimits.x > xLimits.y)
             {
