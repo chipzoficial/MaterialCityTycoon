@@ -1,7 +1,10 @@
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
 using UnityEngine.Serialization;
+using UnityEngine.UI;
 
 namespace MaterialCityTycoon.Camera
 {
@@ -40,6 +43,8 @@ namespace MaterialCityTycoon.Camera
         private Vector3 initialCameraLocalPosition;
         private Quaternion initialCameraLocalRotation;
         private float cameraOrbitDistance;
+
+        private static readonly List<RaycastResult> UserInterfaceRaycastResults = new();
 
         private void Awake()
         {
@@ -130,7 +135,8 @@ namespace MaterialCityTycoon.Camera
             if (mouse != null)
             {
                 float scrollDelta = mouse.scroll.ReadValue().y;
-                if (!Mathf.Approximately(scrollDelta, 0f))
+                if (!Mathf.Approximately(scrollDelta, 0f)
+                    && !IsPointerOverUserInterface(mouse))
                 {
                     targetOrthographicSize = Mathf.Clamp(
                         targetOrthographicSize - scrollDelta * zoomSensitivity,
@@ -152,6 +158,35 @@ namespace MaterialCityTycoon.Camera
                     zoomSmoothTime),
                 minimumOrthographicSize,
                 maximumOrthographicSize);
+        }
+
+        private static bool IsPointerOverUserInterface(Mouse mouse)
+        {
+            EventSystem eventSystem = EventSystem.current;
+            if (eventSystem == null)
+            {
+                return false;
+            }
+
+            PointerEventData pointerData = new(eventSystem)
+            {
+                position = mouse.position.ReadValue()
+            };
+
+            UserInterfaceRaycastResults.Clear();
+            eventSystem.RaycastAll(pointerData, UserInterfaceRaycastResults);
+
+            for (int index = 0; index < UserInterfaceRaycastResults.Count; index++)
+            {
+                if (UserInterfaceRaycastResults[index].module is GraphicRaycaster)
+                {
+                    UserInterfaceRaycastResults.Clear();
+                    return true;
+                }
+            }
+
+            UserInterfaceRaycastResults.Clear();
+            return false;
         }
 
         private void ApplyTiltWithZoom()

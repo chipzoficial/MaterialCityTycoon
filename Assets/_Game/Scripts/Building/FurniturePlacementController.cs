@@ -37,7 +37,52 @@ namespace MaterialCityTycoon.Building
         private int nextFurnitureRotationQuarterTurns;
         private int movingFurnitureRotationQuarterTurns;
 
+        /// <summary>
+        /// Gets whether construction input is currently active.
+        /// </summary>
+        public bool IsPlacementModeActive => placementModeActive;
+
         private bool IsMovingFurniture => movingFurniture != null;
+
+        /// <summary>
+        /// Resolves the placed furniture occupying a construction-grid cell.
+        /// </summary>
+        public bool TryGetFurnitureAtCell(
+            Vector2Int cell,
+            out string furnitureId,
+            out FurnitureDefinition definition)
+        {
+            furnitureId = null;
+            definition = null;
+
+            if (!occupancyByCell.TryGetValue(cell, out string occupantId)
+                || !furnitureById.TryGetValue(occupantId, out PlacedFurnitureState furniture))
+            {
+                return false;
+            }
+
+            for (int index = 0; index < furnitureDefinitions.Count; index++)
+            {
+                if (TryGetValidFurnitureDefinitionAtIndex(index, out FurnitureDefinition candidate)
+                    && candidate.FurnitureTypeId == furniture.typeId)
+                {
+                    furnitureId = furniture.id;
+                    definition = candidate;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Gets whether a placed furniture state still exists for an identifier.
+        /// </summary>
+        public bool ContainsFurniture(string furnitureId)
+        {
+            return !string.IsNullOrWhiteSpace(furnitureId)
+                && furnitureById.ContainsKey(furnitureId);
+        }
 
         private void Awake()
         {

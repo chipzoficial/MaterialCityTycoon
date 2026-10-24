@@ -10,10 +10,16 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: eff17c26142135b4e952757f996f8e63, type: 3}
-  m_Name: 
+  m_Name: DEF_PrototypeToolDisplay
   m_EditorClassIdentifier: Assembly-CSharp::MaterialCityTycoon.Building.FurnitureDefinition
   furnitureTypeId: prototype_tool_display
   displayName: Expositor de ferramentas
   prefab: {fileID: 4947576922067255395, guid: 80ba2531d39f52142a2760387ecfa5e5, type: 3}
   width: 1
   depth: 1
+  displaySlots:
+  - slotId: tool_panel_main
+    displayName: Painel principal
+    allowedDisplayModes: 01000000i
+    localDisplayPosition: {x: 0, y: 0.85, z: 0.03}
+    capacityUnits: 0
