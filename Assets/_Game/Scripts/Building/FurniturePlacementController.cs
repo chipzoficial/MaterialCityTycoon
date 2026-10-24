@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using MaterialCityTycoon.Commerce;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -19,6 +20,9 @@ namespace MaterialCityTycoon.Building
         [Header("Furniture Definitions")]
         [SerializeField] private List<FurnitureDefinition> furnitureDefinitions = new();
 
+        [Header("Product Definitions")]
+        [SerializeField] private List<ProductDefinition> productDefinitions = new();
+
         [Header("Placement Preview")]
         [SerializeField] private Material occupiedCellMaterial;
         [SerializeField] private Material validPreviewMaterial;
@@ -27,6 +31,7 @@ namespace MaterialCityTycoon.Building
         private readonly Dictionary<string, PlacedFurnitureState> furnitureById = new();
         private readonly Dictionary<Vector2Int, string> occupancyByCell = new();
         private readonly Dictionary<string, GameObject> visualsByFurnitureId = new();
+        private readonly FurnitureDisplaySlotAssignments displaySlotAssignments = new();
         private Collider groundCollider;
         private bool placementModeActive;
         private GameObject previewVisual;
@@ -61,18 +66,13 @@ namespace MaterialCityTycoon.Building
                 return false;
             }
 
-            for (int index = 0; index < furnitureDefinitions.Count; index++)
+            if (!TryGetFurnitureDefinition(furniture, out definition))
             {
-                if (TryGetValidFurnitureDefinitionAtIndex(index, out FurnitureDefinition candidate)
-                    && candidate.FurnitureTypeId == furniture.typeId)
-                {
-                    furnitureId = furniture.id;
-                    definition = candidate;
-                    return true;
-                }
+                return false;
             }
 
-            return false;
+            furnitureId = furniture.id;
+            return true;
         }
 
         /// <summary>
@@ -82,6 +82,79 @@ namespace MaterialCityTycoon.Building
         {
             return !string.IsNullOrWhiteSpace(furnitureId)
                 && furnitureById.ContainsKey(furnitureId);
+        }
+
+        /// <summary>
+        /// Gets the compatible configured products for one slot of a placed furniture instance.
+        /// </summary>
+        public void GetCompatibleProductsForDisplaySlot(
+            string furnitureId,
+            string slotId,
+            List<ProductDefinition> compatibleProducts)
+        {
+            if (compatibleProducts == null)
+            {
+                return;
+            }
+
+            compatibleProducts.Clear();
+            if (!TryGetDisplaySlotDefinition(furnitureId, slotId, out DisplaySlotDefinition slotDefinition))
+            {
+                return;
+            }
+
+            for (int index = 0; index < productDefinitions.Count; index++)
+            {
+                ProductDefinition productDefinition = productDefinitions[index];
+                if (IsConfiguredProductDefinition(productDefinition)
+                    && DisplaySlotCompatibility.IsCompatible(productDefinition, slotDefinition))
+                {
+                    compatibleProducts.Add(productDefinition);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets the assigned product for a placed furniture slot, if one exists.
+        /// </summary>
+        public bool TryGetAssignedProductForDisplaySlot(
+            string furnitureId,
+            string slotId,
+            out ProductDefinition productDefinition)
+        {
+            productDefinition = null;
+            return TryGetDisplaySlotDefinition(furnitureId, slotId, out _)
+                && displaySlotAssignments.TryGetProductId(furnitureId, slotId, out string productId)
+                && TryGetConfiguredProductDefinition(productId, out productDefinition);
+        }
+
+        /// <summary>
+        /// Assigns a compatible configured product, or removes the assignment when productDefinition is null.
+        /// </summary>
+        public bool TryAssignProductToDisplaySlot(
+            string furnitureId,
+            string slotId,
+            ProductDefinition productDefinition)
+        {
+            if (!TryGetDisplaySlotDefinition(furnitureId, slotId, out DisplaySlotDefinition slotDefinition))
+            {
+                return false;
+            }
+
+            if (productDefinition == null)
+            {
+                displaySlotAssignments.RemoveProductId(furnitureId, slotId);
+                return true;
+            }
+
+            if (!IsConfiguredProductDefinition(productDefinition)
+                || !DisplaySlotCompatibility.IsCompatible(productDefinition, slotDefinition))
+            {
+                return false;
+            }
+
+            displaySlotAssignments.SetProductId(furnitureId, slotId, productDefinition.ProductId);
+            return true;
         }
 
         private void Awake()
@@ -102,6 +175,7 @@ namespace MaterialCityTycoon.Building
             }
 
             ValidateFurnitureDefinitions();
+            ValidateProductDefinitions();
             SelectFirstValidFurnitureDefinition();
         }
 
@@ -540,6 +614,126 @@ namespace MaterialCityTycoon.Building
             }
         }
 
+        private void ValidateProductDefinitions()
+        {
+            Dictionary<string, int> definitionIndexesById = new();
+
+            for (int index = 0; index < productDefinitions.Count; index++)
+            {
+                ProductDefinition definition = productDefinitions[index];
+                if (definition == null)
+                {
+                    Debug.LogWarning($"Product definition at index {index} is not assigned.", this);
+                    continue;
+                }
+
+                if (!definition.IsValid(out string validationMessage))
+                {
+                    Debug.LogWarning(
+                        $"Product definition '{definition.name}' at index {index} is invalid: {validationMessage}",
+                        this);
+                    continue;
+                }
+
+                if (definitionIndexesById.TryGetValue(definition.ProductId, out int firstIndex))
+                {
+                    Debug.LogWarning(
+                        $"Product Id '{definition.ProductId}' is duplicated at indexes {firstIndex} and {index}; both entries are ignored.",
+                        this);
+                    continue;
+                }
+
+                definitionIndexesById.Add(definition.ProductId, index);
+            }
+        }
+
+        private bool TryGetDisplaySlotDefinition(
+            string furnitureId,
+            string slotId,
+            out DisplaySlotDefinition slotDefinition)
+        {
+            slotDefinition = null;
+            if (string.IsNullOrWhiteSpace(furnitureId)
+                || string.IsNullOrWhiteSpace(slotId)
+                || !furnitureById.TryGetValue(furnitureId, out PlacedFurnitureState furniture)
+                || !TryGetFurnitureDefinition(furniture, out FurnitureDefinition furnitureDefinition))
+            {
+                return false;
+            }
+
+            foreach (DisplaySlotDefinition candidate in furnitureDefinition.DisplaySlots)
+            {
+                if (candidate != null && candidate.SlotId == slotId)
+                {
+                    slotDefinition = candidate;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool TryGetFurnitureDefinition(
+            PlacedFurnitureState furniture,
+            out FurnitureDefinition furnitureDefinition)
+        {
+            furnitureDefinition = null;
+            if (furniture == null)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < furnitureDefinitions.Count; index++)
+            {
+                if (TryGetValidFurnitureDefinitionAtIndex(index, out FurnitureDefinition candidate)
+                    && candidate.FurnitureTypeId == furniture.typeId)
+                {
+                    furnitureDefinition = candidate;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool IsConfiguredProductDefinition(ProductDefinition productDefinition)
+        {
+            return productDefinition != null
+                && productDefinition.IsValid(out _)
+                && TryGetConfiguredProductDefinition(productDefinition.ProductId, out ProductDefinition configuredProduct)
+                && configuredProduct == productDefinition;
+        }
+
+        private bool TryGetConfiguredProductDefinition(
+            string productId,
+            out ProductDefinition productDefinition)
+        {
+            productDefinition = null;
+            if (string.IsNullOrWhiteSpace(productId))
+            {
+                return false;
+            }
+
+            for (int index = 0; index < productDefinitions.Count; index++)
+            {
+                ProductDefinition candidate = productDefinitions[index];
+                if (candidate == null || candidate.ProductId != productId)
+                {
+                    continue;
+                }
+
+                if (!candidate.IsValid(out _) || productDefinition != null)
+                {
+                    productDefinition = null;
+                    return false;
+                }
+
+                productDefinition = candidate;
+            }
+
+            return productDefinition != null;
+        }
+
         private void EnsurePreviewVisualForSelectedDefinition()
         {
             if (!TryGetSelectedFurnitureDefinition(out FurnitureDefinition definition))
@@ -604,6 +798,7 @@ namespace MaterialCityTycoon.Building
         {
             RemoveFurnitureOccupancy(furniture);
             furnitureById.Remove(furniture.id);
+            displaySlotAssignments.RemoveFurniture(furniture.id);
         }
 
         private void ApplyFurniturePlacement(
@@ -847,6 +1042,69 @@ namespace MaterialCityTycoon.Building
                 this.width = width;
                 this.depth = depth;
                 this.rotationQuarterTurns = rotationQuarterTurns;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Holds runtime product assignments for display slots on placed furniture instances.
+    /// </summary>
+    public sealed class FurnitureDisplaySlotAssignments
+    {
+        private readonly Dictionary<string, Dictionary<string, string>> productIdsBySlotByFurnitureId = new();
+
+        public bool TryGetProductId(string furnitureId, string slotId, out string productId)
+        {
+            productId = null;
+            return !string.IsNullOrWhiteSpace(furnitureId)
+                && !string.IsNullOrWhiteSpace(slotId)
+                && productIdsBySlotByFurnitureId.TryGetValue(furnitureId, out Dictionary<string, string> productIdsBySlot)
+                && productIdsBySlot.TryGetValue(slotId, out productId);
+        }
+
+        public void SetProductId(string furnitureId, string slotId, string productId)
+        {
+            if (string.IsNullOrWhiteSpace(furnitureId) || string.IsNullOrWhiteSpace(slotId))
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(productId))
+            {
+                RemoveProductId(furnitureId, slotId);
+                return;
+            }
+
+            if (!productIdsBySlotByFurnitureId.TryGetValue(furnitureId, out Dictionary<string, string> productIdsBySlot))
+            {
+                productIdsBySlot = new Dictionary<string, string>();
+                productIdsBySlotByFurnitureId.Add(furnitureId, productIdsBySlot);
+            }
+
+            productIdsBySlot[slotId] = productId;
+        }
+
+        public void RemoveProductId(string furnitureId, string slotId)
+        {
+            if (string.IsNullOrWhiteSpace(furnitureId)
+                || string.IsNullOrWhiteSpace(slotId)
+                || !productIdsBySlotByFurnitureId.TryGetValue(furnitureId, out Dictionary<string, string> productIdsBySlot))
+            {
+                return;
+            }
+
+            productIdsBySlot.Remove(slotId);
+            if (productIdsBySlot.Count == 0)
+            {
+                productIdsBySlotByFurnitureId.Remove(furnitureId);
+            }
+        }
+
+        public void RemoveFurniture(string furnitureId)
+        {
+            if (!string.IsNullOrWhiteSpace(furnitureId))
+            {
+                productIdsBySlotByFurnitureId.Remove(furnitureId);
             }
         }
     }

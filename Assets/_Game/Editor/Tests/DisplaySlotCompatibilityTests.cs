@@ -150,4 +150,50 @@ namespace MaterialCityTycoon.EditorTests
             return holder.DisplaySlots[0];
         }
     }
+
+    public sealed class FurnitureDisplaySlotAssignmentsTests
+    {
+        [Test]
+        public void AssignmentsAreIndependentForDifferentFurnitureInstances()
+        {
+            FurnitureDisplaySlotAssignments assignments = new();
+            assignments.SetProductId("shelf_a", "shelf_bottom", "argamassa");
+            assignments.SetProductId("shelf_b", "shelf_bottom", "argamassa");
+            assignments.SetProductId("shelf_b", "shelf_middle", "martelo");
+
+            Assert.That(assignments.TryGetProductId("shelf_a", "shelf_bottom", out string firstProduct), Is.True);
+            Assert.That(firstProduct, Is.EqualTo("argamassa"));
+            Assert.That(assignments.TryGetProductId("shelf_a", "shelf_middle", out _), Is.False);
+            Assert.That(assignments.TryGetProductId("shelf_b", "shelf_middle", out string secondProduct), Is.True);
+            Assert.That(secondProduct, Is.EqualTo("martelo"));
+        }
+
+        [Test]
+        public void RemovingOneSlotAssignmentPreservesOtherAssignments()
+        {
+            FurnitureDisplaySlotAssignments assignments = new();
+            assignments.SetProductId("shelf_a", "shelf_bottom", "argamassa");
+            assignments.SetProductId("shelf_a", "shelf_middle", "argamassa");
+
+            assignments.RemoveProductId("shelf_a", "shelf_bottom");
+
+            Assert.That(assignments.TryGetProductId("shelf_a", "shelf_bottom", out _), Is.False);
+            Assert.That(assignments.TryGetProductId("shelf_a", "shelf_middle", out string productId), Is.True);
+            Assert.That(productId, Is.EqualTo("argamassa"));
+        }
+
+        [Test]
+        public void RemovingFurnitureClearsOnlyItsAssignments()
+        {
+            FurnitureDisplaySlotAssignments assignments = new();
+            assignments.SetProductId("shelf_a", "shelf_bottom", "argamassa");
+            assignments.SetProductId("shelf_b", "shelf_bottom", "argamassa");
+
+            assignments.RemoveFurniture("shelf_a");
+
+            Assert.That(assignments.TryGetProductId("shelf_a", "shelf_bottom", out _), Is.False);
+            Assert.That(assignments.TryGetProductId("shelf_b", "shelf_bottom", out string productId), Is.True);
+            Assert.That(productId, Is.EqualTo("argamassa"));
+        }
+    }
 }

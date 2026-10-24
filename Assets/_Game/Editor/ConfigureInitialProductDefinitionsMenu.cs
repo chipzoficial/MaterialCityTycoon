@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using MaterialCityTycoon.Building;
 using MaterialCityTycoon.Commerce;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace MaterialCityTycoon.EditorTools
 {
@@ -259,6 +262,153 @@ namespace MaterialCityTycoon.EditorTools
             public string CategoryId { get; }
             public ProductSellingUnit SellingUnit { get; }
             public ProductDisplayMode[] AllowedDisplayModes { get; }
+        }
+    }
+
+    public static class ConfigureFurnitureProductCatalogMenu
+    {
+        private const string StorePrototypeScenePath = "Assets/_Game/Scenes/StorePrototype.unity";
+        private const string ProductDefinitionsFolder = "Assets/_Game/ScriptableObjects/Products";
+
+        [MenuItem("Tools/Material City Tycoon/Configure Furniture Product Catalog")]
+        public static void ConfigureFurnitureProductCatalog()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                Debug.LogError("Exit Play Mode before configuring the furniture product catalog.");
+                return;
+            }
+
+            Scene scene = SceneManager.GetSceneByPath(StorePrototypeScenePath);
+            if (!scene.IsValid() || !scene.isLoaded)
+            {
+                Debug.LogError($"Open '{StorePrototypeScenePath}' before running this command.");
+                return;
+            }
+
+            if (!TryGetSinglePlacementController(scene, out FurniturePlacementController placementController)
+                || !TryBuildCatalog(placementController, out List<ProductDefinition> catalog))
+            {
+                return;
+            }
+
+            Undo.RecordObject(placementController, "Configure Furniture Product Catalog");
+            SerializedObject serializedController = new(placementController);
+            SerializedProperty productDefinitions = serializedController.FindProperty("productDefinitions");
+            productDefinitions.arraySize = catalog.Count;
+            for (int index = 0; index < catalog.Count; index++)
+            {
+                productDefinitions.GetArrayElementAtIndex(index).objectReferenceValue = catalog[index];
+            }
+
+            serializedController.ApplyModifiedProperties();
+            EditorUtility.SetDirty(placementController);
+            EditorSceneManager.MarkSceneDirty(scene);
+            Debug.Log(
+                $"Furniture product catalog configured with {catalog.Count} definitions. StorePrototype was marked dirty; save the scene manually when ready.",
+                placementController);
+        }
+
+        private static bool TryGetSinglePlacementController(Scene scene, out FurniturePlacementController placementController)
+        {
+            placementController = null;
+            foreach (FurniturePlacementController candidate in Resources.FindObjectsOfTypeAll<FurniturePlacementController>())
+            {
+                if (candidate.gameObject.scene != scene)
+                {
+                    continue;
+                }
+
+                if (placementController != null)
+                {
+                    Debug.LogError(
+                        $"More than one FurniturePlacementController was found in '{scene.path}'.",
+                        placementController);
+                    return false;
+                }
+
+                placementController = candidate;
+            }
+
+            if (placementController != null)
+            {
+                return true;
+            }
+
+            Debug.LogError($"No FurniturePlacementController was found in '{scene.path}'.");
+            return false;
+        }
+
+        private static bool TryBuildCatalog(
+            FurniturePlacementController placementController,
+            out List<ProductDefinition> catalog)
+        {
+            catalog = new List<ProductDefinition>();
+            Dictionary<string, ProductDefinition> definitionsById = new(StringComparer.Ordinal);
+
+            SerializedProperty configuredProducts = new SerializedObject(placementController)
+                .FindProperty("productDefinitions");
+            for (int index = 0; index < configuredProducts.arraySize; index++)
+            {
+                ProductDefinition definition = configuredProducts.GetArrayElementAtIndex(index)
+                    .objectReferenceValue as ProductDefinition;
+                if (definition != null && !TryAddDefinition(definition, definitionsById, catalog))
+                {
+                    return false;
+                }
+            }
+
+            List<string> assetPaths = new();
+            foreach (string guid in AssetDatabase.FindAssets("t:ProductDefinition", new[] { ProductDefinitionsFolder }))
+            {
+                assetPaths.Add(AssetDatabase.GUIDToAssetPath(guid));
+            }
+
+            assetPaths.Sort(StringComparer.Ordinal);
+            foreach (string assetPath in assetPaths)
+            {
+                ProductDefinition definition = AssetDatabase.LoadAssetAtPath<ProductDefinition>(assetPath);
+                if (definition != null && !TryAddDefinition(definition, definitionsById, catalog))
+                {
+                    return false;
+                }
+            }
+
+            if (catalog.Count > 0)
+            {
+                return true;
+            }
+
+            Debug.LogError($"No ProductDefinition assets were found in '{ProductDefinitionsFolder}'.");
+            return false;
+        }
+
+        private static bool TryAddDefinition(
+            ProductDefinition definition,
+            Dictionary<string, ProductDefinition> definitionsById,
+            List<ProductDefinition> catalog)
+        {
+            if (!definition.IsValid(out string validationMessage))
+            {
+                Debug.LogError($"Product definition '{definition.name}' is invalid: {validationMessage}", definition);
+                return false;
+            }
+
+            if (definitionsById.TryGetValue(definition.ProductId, out ProductDefinition existingDefinition))
+            {
+                if (existingDefinition == definition)
+                {
+                    return true;
+                }
+
+                Debug.LogError(
+                    $"Product Id conflict: '{definition.ProductId}' is used by both '{existingDefinition.name}' and '{definition.name}'.");
+                return false;
+            }
+
+            definitionsById.Add(definition.ProductId, definition);
+            catalog.Add(definition);
+            return true;
         }
     }
 }

@@ -1174,6 +1174,10 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 100ba2357147b4f4287c50172fed04a3, type: 2}
   - {fileID: 11400000, guid: dbdfcfeeccdd7a345a96199a875d750b, type: 2}
   - {fileID: 11400000, guid: f117e5bdb80adcd40ba26570853545ad, type: 2}
+  productDefinitions:
+  - {fileID: 11400000, guid: f718da9ea58d7d940b7b45a575938ea4, type: 2}
+  - {fileID: 11400000, guid: 185889b427c28ae4784a056c50c7f4ea, type: 2}
+  - {fileID: 11400000, guid: 89928de4c74f49f44b4dea4d6b988aa5, type: 2}
   occupiedCellMaterial: {fileID: 2100000, guid: e26c1dd9e91008d4e8c1281a70287755, type: 2}
   validPreviewMaterial: {fileID: 2100000, guid: 601999bf082d8754d94a0c5cb47dde1e, type: 2}
   invalidPreviewMaterial: {fileID: 2100000, guid: 963f3c2912fc3c74fb17ee8644241e15, type: 2}

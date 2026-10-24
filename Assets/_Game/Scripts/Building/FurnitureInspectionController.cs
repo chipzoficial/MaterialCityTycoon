@@ -63,7 +63,7 @@ namespace MaterialCityTycoon.Building
                     out string furnitureId,
                     out FurnitureDefinition definition))
             {
-                inspectionPanel.Show(furnitureId, definition);
+                inspectionPanel.Show(furnitureId, definition, furniturePlacementController);
                 return;
             }
 
