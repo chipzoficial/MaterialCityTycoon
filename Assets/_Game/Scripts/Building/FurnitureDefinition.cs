@@ -16,6 +16,8 @@ namespace MaterialCityTycoon.Building
         [SerializeField, Min(1)] private int width = 1;
         [SerializeField, Min(1)] private int depth = 1;
         [SerializeField] private DisplaySlotDefinition[] displaySlots = Array.Empty<DisplaySlotDefinition>();
+        [SerializeField] private Vector2Int[] accessCellOffsets = Array.Empty<Vector2Int>();
+        [SerializeField] private StorageCapacityDefinition storageCapacity;
 
         public string FurnitureTypeId => furnitureTypeId;
         public string DisplayName => displayName;
@@ -23,6 +25,8 @@ namespace MaterialCityTycoon.Building
         public int Width => width;
         public int Depth => depth;
         public IReadOnlyList<DisplaySlotDefinition> DisplaySlots => displaySlots;
+        public IReadOnlyList<Vector2Int> AccessCellOffsets => accessCellOffsets ?? Array.Empty<Vector2Int>();
+        public StorageCapacityDefinition StorageCapacity => storageCapacity;
 
         public bool IsValid(out string validationMessage)
         {
@@ -48,6 +52,17 @@ namespace MaterialCityTycoon.Building
             {
                 validationMessage = "Display Slots cannot be null.";
                 return false;
+            }
+
+            HashSet<Vector2Int> accessCells = new();
+            foreach (Vector2Int offset in AccessCellOffsets)
+            {
+                if ((offset.x >= 0 && offset.x < width && offset.y >= 0 && offset.y < depth)
+                    || !accessCells.Add(offset))
+                {
+                    validationMessage = "Access offsets must be unique and outside the physical footprint.";
+                    return false;
+                }
             }
 
             HashSet<string> slotIds = new(StringComparer.Ordinal);

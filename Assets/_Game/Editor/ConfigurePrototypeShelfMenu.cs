@@ -47,6 +47,17 @@ namespace MaterialCityTycoon.EditorTools
             2,
             1);
 
+        private static readonly FurnitureConfiguration IndustrialStorageShelf = new(
+            "Assets/_Game/Art/Models/Storage/PF_EstanteDeposito.prefab",
+            DefinitionFolderPath + "/DEF_EstanteDeposito.asset",
+            "DEF_EstanteDeposito",
+            "industrial_storage_shelf",
+            "Estante de Depósito",
+            2,
+            1,
+            new[] { new Vector2Int(0, 1), new Vector2Int(1, 1),
+                new Vector2Int(0, -1), new Vector2Int(1, -1) });
+
         [MenuItem("Tools/Material City Tycoon/Configure Prototype Shelf")]
         private static void ConfigurePrototypeShelf()
         {
@@ -88,6 +99,60 @@ namespace MaterialCityTycoon.EditorTools
                 PrototypePartsBinRack,
                 shelfDefinition,
                 toolDisplayDefinition);
+        }
+
+        [MenuItem("Tools/Material City Tycoon/Configure Industrial Storage Shelf")]
+        private static void ConfigureIndustrialStorageShelf()
+        {
+            if (!CanConfigureInEditor()
+                || !TryGetConfiguredDefinition(IndustrialStorageShelf.definitionAssetPath, IndustrialStorageShelf.furnitureTypeId, out FurnitureDefinition definition)
+                || !TryGetFurniturePrefab(IndustrialStorageShelf, out GameObject prefab))
+            {
+                return;
+            }
+
+            if (definition.Prefab != prefab || definition.Width != 2 || definition.Depth != 1)
+            {
+                Debug.LogError("Industrial shelf definition must reference the existing prefab and use a 2x1 footprint.", definition);
+                return;
+            }
+
+            if (prefab.transform.localScale != Vector3.one || !TryGetCombinedMeshRendererBounds(prefab.transform, out Bounds bounds))
+            {
+                Debug.LogError("Industrial shelf requires a unit-scale root and measurable MeshRenderers.", prefab);
+                return;
+            }
+
+            Debug.Log($"Industrial shelf local bounds: center {bounds.center.ToString("F3")}, min {bounds.min.ToString("F3")}, size {bounds.size.ToString("F3")}; operational front is +Z.", prefab);
+            if (Mathf.Abs(bounds.center.x) > FootprintTolerance || Mathf.Abs(bounds.center.z) > FootprintTolerance
+                || Mathf.Abs(bounds.min.y) > FootprintTolerance || bounds.size.x > 2f + FootprintTolerance || bounds.size.z > 1f + FootprintTolerance)
+            {
+                Debug.LogWarning("Industrial shelf visual bounds are offset from its pivot or exceed the 2x1 footprint; the prefab was not modified.", prefab);
+            }
+
+            SerializedObject serialized = new(definition);
+            SerializedProperty offsets = serialized.FindProperty("accessCellOffsets");
+            bool changed = offsets.arraySize != IndustrialStorageShelf.accessOffsets.Length;
+            for (int i = 0; !changed && i < offsets.arraySize; i++)
+            {
+                changed = offsets.GetArrayElementAtIndex(i).vector2IntValue != IndustrialStorageShelf.accessOffsets[i];
+            }
+
+            if (changed)
+            {
+                Undo.RecordObject(definition, "Configure Industrial Shelf Access");
+                offsets.arraySize = IndustrialStorageShelf.accessOffsets.Length;
+                for (int i = 0; i < offsets.arraySize; i++)
+                {
+                    offsets.GetArrayElementAtIndex(i).vector2IntValue = IndustrialStorageShelf.accessOffsets[i];
+                }
+
+                serialized.ApplyModifiedProperties();
+                EditorUtility.SetDirty(definition);
+                AssetDatabase.SaveAssetIfDirty(definition);
+            }
+
+            Debug.Log("Industrial shelf access configured on both long faces; the scene was not modified.", definition);
         }
 
         [MenuItem("Tools/Material City Tycoon/Center Parts Bin Rack on Grid")]
@@ -210,6 +275,13 @@ namespace MaterialCityTycoon.EditorTools
             }
 
             FurnitureDefinition definition = existingAsset as FurnitureDefinition;
+            if (configuration.accessOffsets != null && definition != null
+                && !string.IsNullOrWhiteSpace(definition.FurnitureTypeId)
+                && definition.FurnitureTypeId != configuration.furnitureTypeId)
+            {
+                Debug.LogError($"Cannot overwrite a different furniture definition at '{configuration.definitionAssetPath}'.", definition);
+                return;
+            }
             bool createDefinition = definition == null;
             if (createDefinition)
             {
@@ -255,11 +327,21 @@ namespace MaterialCityTycoon.EditorTools
             }
 
             definition.name = configuration.definitionAssetName;
+            definitionSerialized.Update();
             definitionProperties.furnitureTypeId.stringValue = configuration.furnitureTypeId;
             definitionProperties.displayName.stringValue = configuration.displayName;
             definitionProperties.prefab.objectReferenceValue = prefab;
             definitionProperties.width.intValue = configuration.width;
             definitionProperties.depth.intValue = configuration.depth;
+            if (configuration.accessOffsets != null)
+            {
+                SerializedProperty offsets = definitionSerialized.FindProperty("accessCellOffsets");
+                offsets.arraySize = configuration.accessOffsets.Length;
+                for (int i = 0; i < configuration.accessOffsets.Length; i++)
+                {
+                    offsets.GetArrayElementAtIndex(i).vector2IntValue = configuration.accessOffsets[i];
+                }
+            }
             definitionSerialized.ApplyModifiedProperties();
             EditorUtility.SetDirty(definition);
 
@@ -693,6 +775,7 @@ namespace MaterialCityTycoon.EditorTools
             public readonly string displayName;
             public readonly int width;
             public readonly int depth;
+            public readonly Vector2Int[] accessOffsets;
 
             public FurnitureConfiguration(
                 string prefabPath,
@@ -701,7 +784,8 @@ namespace MaterialCityTycoon.EditorTools
                 string furnitureTypeId,
                 string displayName,
                 int width,
-                int depth)
+                int depth,
+                Vector2Int[] accessOffsets = null)
             {
                 this.prefabPath = prefabPath;
                 this.definitionAssetPath = definitionAssetPath;
@@ -710,6 +794,7 @@ namespace MaterialCityTycoon.EditorTools
                 this.displayName = displayName;
                 this.width = width;
                 this.depth = depth;
+                this.accessOffsets = accessOffsets;
             }
         }
     }

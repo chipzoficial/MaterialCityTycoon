@@ -11,6 +11,29 @@ namespace MaterialCityTycoon.EditorTools
 {
     public static class ValidateDisplaySlotCompatibilityMenu
     {
+        [MenuItem("Tools/Material City Tycoon/Log Storage Locations")]
+        private static void LogStorageLocations()
+        {
+            FurniturePlacementController[] controllers = UnityEngine.Object.FindObjectsByType<FurniturePlacementController>(FindObjectsInactive.Include);
+            if (controllers.Length == 0)
+            {
+                Debug.LogWarning("No store placement controller was found.");
+                return;
+            }
+
+            foreach (FurniturePlacementController controller in controllers)
+            {
+                Debug.Log($"Store '{controller.name}': {controller.StorageLocations.Count} storage location(s).", controller);
+                foreach (StorageLocation location in controller.StorageLocations)
+                {
+                    Debug.Log($"Storage location: FurnitureId={location.Id}, name={location.DisplayName}, type={location.Type}.", controller);
+                }
+            }
+        }
+
+        [MenuItem("Tools/Material City Tycoon/Log Storage Locations", true)]
+        private static bool CanLogStorageLocations() => EditorApplication.isPlaying;
+
         [MenuItem("Tools/Material City Tycoon/Validate Product Slot Compatibility")]
         public static void ValidateProductSlotCompatibility()
         {

@@ -12,6 +12,7 @@ namespace MaterialCityTycoon.Building
     public sealed class FurniturePlacementController : MonoBehaviour
     {
         private const int QuarterTurnCount = 4;
+        private const string IndustrialStorageShelfTypeId = "industrial_storage_shelf";
 
         [Header("References")]
         [SerializeField] private ConstructionGrid constructionGrid;
@@ -34,6 +35,7 @@ namespace MaterialCityTycoon.Building
         private readonly FurnitureDisplaySlotAssignments displaySlotAssignments = new();
         private readonly FurnitureDisplaySlotInventory displaySlotInventory = new();
         private readonly StoreInventory storeInventory = new();
+        private readonly StoreStorageLocations storageLocations = new();
         private Collider groundCollider;
         private bool placementModeActive;
         private GameObject previewVisual;
@@ -43,6 +45,8 @@ namespace MaterialCityTycoon.Building
         [NonSerialized] private PlacedFurnitureState movingFurniture;
         private int nextFurnitureRotationQuarterTurns;
         private int movingFurnitureRotationQuarterTurns;
+        private FurniturePlacementPreviewOverlay cellPreviewOverlay;
+        private readonly List<PlacementPreviewCell> previewCells = new();
 
         /// <summary>
         /// Gets whether construction input is currently active.
@@ -53,6 +57,19 @@ namespace MaterialCityTycoon.Building
         /// Gets the store's reserve inventory. Displayed units are tracked separately.
         /// </summary>
         public StoreInventory StoreInventory => storeInventory;
+
+        /// <summary>Storage infrastructure for this store; reserve units are not allocated to it.</summary>
+        public IReadOnlyCollection<StorageLocation> StorageLocations => storageLocations.Locations;
+
+        /// <summary>Gets the storage location associated with an industrial shelf's FurnitureId.</summary>
+        public bool TryGetFurnitureStorageLocation(string furnitureId, out StorageLocation location)
+        {
+            location = null;
+            return !string.IsNullOrWhiteSpace(furnitureId)
+                && furnitureById.TryGetValue(furnitureId, out PlacedFurnitureState furniture)
+                && furniture.typeId == IndustrialStorageShelfTypeId
+                && storageLocations.TryGet(furnitureId, out location);
+        }
 
         private bool IsMovingFurniture => movingFurniture != null;
 
@@ -371,9 +388,15 @@ namespace MaterialCityTycoon.Building
             }
         }
 
+        private void OnDisable()
+        {
+            DisposeCellPreview();
+        }
+
         private void OnDestroy()
         {
             DestroyPreviewVisual();
+            DisposeCellPreview();
         }
 
         private void EnterPlacementMode()
@@ -391,25 +414,31 @@ namespace MaterialCityTycoon.Building
             cellPointer.RestoreIndicatorMaterial();
 
             DestroyPreviewVisual();
+            DisposeCellPreview();
         }
 
         private void UpdatePlacementPreview()
         {
             if (previewVisual == null)
             {
+                HideCellPreview();
                 cellPointer.RestoreIndicatorMaterial();
                 return;
             }
 
             if (!cellPointer.TryGetPointedCell(out Vector2Int anchorCell))
             {
+                HideCellPreview();
                 previewVisual.SetActive(false);
                 return;
             }
 
             FurnitureDefinition definition = null;
-            if (!IsMovingFurniture && !TryGetSelectedFurnitureDefinition(out definition))
+            if (!(IsMovingFurniture
+                    ? TryGetFurnitureDefinition(movingFurniture, out definition)
+                    : TryGetSelectedFurnitureDefinition(out definition)))
             {
+                HideCellPreview();
                 previewVisual.SetActive(false);
                 cellPointer.RestoreIndicatorMaterial();
                 return;
@@ -419,12 +448,14 @@ namespace MaterialCityTycoon.Building
             int previewDepth = IsMovingFurniture ? movingFurniture.depth : definition.Depth;
             int previewRotation = GetPreviewRotationQuarterTurns();
             string ignoredFurnitureId = IsMovingFurniture ? movingFurniture.id : null;
-            bool isValid = IsFootprintAvailable(
+            bool isValid = EvaluatePlacement(
                 anchorCell,
                 previewWidth,
                 previewDepth,
                 previewRotation,
-                ignoredFurnitureId);
+                definition,
+                ignoredFurnitureId,
+                previewCells);
 
             cellPointer.SetIndicatorMaterial(isValid ? null : occupiedCellMaterial);
             SetVisualRotation(previewVisual, previewRotation);
@@ -435,12 +466,28 @@ namespace MaterialCityTycoon.Building
                     previewDepth,
                     previewRotation))
             {
+                HideCellPreview();
                 previewVisual.SetActive(false);
                 return;
             }
 
             SetPreviewMaterial(isValid);
             previewVisual.SetActive(true);
+            cellPreviewOverlay ??= new FurniturePlacementPreviewOverlay();
+            cellPreviewOverlay.Show(constructionGrid, groundCollider.bounds.max.y, previewCells);
+        }
+
+        private void HideCellPreview()
+        {
+            previewCells.Clear();
+            cellPreviewOverlay?.Hide();
+        }
+
+        private void DisposeCellPreview()
+        {
+            previewCells.Clear();
+            cellPreviewOverlay?.Dispose();
+            cellPreviewOverlay = null;
         }
 
         private bool TryPlaceFurniture()
@@ -456,7 +503,8 @@ namespace MaterialCityTycoon.Building
                     anchorCell,
                     definition.Width,
                     definition.Depth,
-                    rotationQuarterTurns))
+                    rotationQuarterTurns,
+                    definition))
             {
                 return false;
             }
@@ -576,12 +624,14 @@ namespace MaterialCityTycoon.Building
                 return false;
             }
 
-            if (!cellPointer.TryGetPointedCell(out Vector2Int destinationAnchor)
+            if (!TryGetFurnitureDefinition(movingFurniture, out FurnitureDefinition moveDefinition)
+                || !cellPointer.TryGetPointedCell(out Vector2Int destinationAnchor)
                 || !IsFootprintAvailable(
                     destinationAnchor,
                     movingFurniture.width,
                     movingFurniture.depth,
                     movingFurnitureRotationQuarterTurns,
+                    moveDefinition,
                     movingFurniture.id)
                 || !TryGetVisualBounds(visual, out _))
             {
@@ -656,6 +706,10 @@ namespace MaterialCityTycoon.Building
             else if (keyboard.digit3Key.wasPressedThisFrame)
             {
                 TrySelectFurnitureDefinition(2);
+            }
+            else if (keyboard.digit4Key.wasPressedThisFrame)
+            {
+                TrySelectFurnitureDefinition(3);
             }
         }
 
@@ -925,13 +979,25 @@ namespace MaterialCityTycoon.Building
 
         private bool TryRegisterFurniture(PlacedFurnitureState furniture)
         {
-            if (furnitureById.ContainsKey(furniture.id)
+            if (furniture == null || string.IsNullOrWhiteSpace(furniture.id)
+                || furnitureById.ContainsKey(furniture.id)
+                || !TryGetFurnitureDefinition(furniture, out FurnitureDefinition definition)
                 || !IsFootprintAvailable(
                     furniture.anchorCell,
                     furniture.width,
                     furniture.depth,
-                    furniture.rotationQuarterTurns))
+                    furniture.rotationQuarterTurns,
+                    definition))
             {
+                return false;
+            }
+
+            if (furniture.typeId == IndustrialStorageShelfTypeId
+                && !storageLocations.TryRegister(new StorageLocation(furniture.id,
+                    string.IsNullOrWhiteSpace(definition.DisplayName) ? "Estante de Depósito" : definition.DisplayName,
+                    StorageLocationType.Indoor)))
+            {
+                Debug.LogWarning($"Could not register storage location for furniture '{furniture.id}'.", this);
                 return false;
             }
 
@@ -945,6 +1011,10 @@ namespace MaterialCityTycoon.Building
             RemoveFurnitureOccupancy(furniture);
             furnitureById.Remove(furniture.id);
             displaySlotAssignments.RemoveFurniture(furniture.id);
+            if (furniture.typeId == IndustrialStorageShelfTypeId)
+            {
+                storageLocations.TryRemove(furniture.id);
+            }
         }
 
         private bool TryReturnDisplayedUnitsToReserve(string furnitureId)
@@ -979,8 +1049,20 @@ namespace MaterialCityTycoon.Building
             int furnitureWidth,
             int furnitureDepth,
             int rotationQuarterTurns,
+            FurnitureDefinition definition,
             string ignoredFurnitureId = null)
         {
+            return EvaluatePlacement(anchorCell, furnitureWidth, furnitureDepth, rotationQuarterTurns,
+                definition, ignoredFurnitureId, null);
+        }
+
+        private bool EvaluatePlacement(
+            Vector2Int anchorCell, int furnitureWidth, int furnitureDepth, int rotationQuarterTurns,
+            FurnitureDefinition definition, string ignoredFurnitureId, List<PlacementPreviewCell> cells)
+        {
+            cells?.Clear();
+            HashSet<Vector2Int> proposedFootprint = new();
+            bool valid = true;
             foreach (Vector2Int cell in GetOccupiedCells(
                          anchorCell,
                          furnitureWidth,
@@ -991,11 +1073,56 @@ namespace MaterialCityTycoon.Building
                     || (occupancyByCell.TryGetValue(cell, out string occupantId)
                         && occupantId != ignoredFurnitureId))
                 {
-                    return false;
+                    valid = false;
+                }
+
+                proposedFootprint.Add(cell);
+            }
+
+            HashSet<Vector2Int> otherAccess = new();
+            foreach (PlacedFurnitureState other in furnitureById.Values)
+            {
+                if (other.id == ignoredFurnitureId)
+                {
+                    continue;
+                }
+
+                if (!TryGetFurnitureDefinition(other, out FurnitureDefinition otherDefinition))
+                {
+                    valid = false;
+                    continue;
+                }
+
+                foreach (Vector2Int cell in FurnitureAccessCells.GetCells(other.anchorCell, other.width,
+                             other.depth, other.rotationQuarterTurns, otherDefinition.AccessCellOffsets))
+                {
+                    otherAccess.Add(cell);
+                    if (proposedFootprint.Contains(cell))
+                    {
+                        valid = false;
+                    }
                 }
             }
 
-            return true;
+            foreach (Vector2Int cell in FurnitureAccessCells.GetCells(anchorCell, furnitureWidth,
+                         furnitureDepth, rotationQuarterTurns, definition.AccessCellOffsets))
+            {
+                bool blocked = !constructionGrid.IsInside(cell) || proposedFootprint.Contains(cell)
+                    || (occupancyByCell.TryGetValue(cell, out string occupantId) && occupantId != ignoredFurnitureId);
+                if (blocked) valid = false;
+                cells?.Add(new PlacementPreviewCell(cell, blocked ? PlacementCellKind.BlockedAccess
+                    : otherAccess.Contains(cell) ? PlacementCellKind.SharedAccess : PlacementCellKind.FreeAccess));
+            }
+
+            if (cells != null)
+            {
+                foreach (Vector2Int cell in proposedFootprint)
+                {
+                    cells.Add(new PlacementPreviewCell(cell, valid ? PlacementCellKind.ValidFootprint : PlacementCellKind.InvalidFootprint));
+                }
+            }
+
+            return valid;
         }
 
         private void AddFurnitureOccupancy(PlacedFurnitureState furniture)

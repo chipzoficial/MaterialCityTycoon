@@ -118,3 +118,6 @@ MonoBehaviour:
     allowedDisplayModes: 02000000i
     localDisplayPosition: {x: 0.48197, y: 1.3916907, z: -0.0074735885}
     capacityUnits: 0
+  accessCellOffsets:
+  - {x: 0, y: 1}
+  - {x: 1, y: 1}
