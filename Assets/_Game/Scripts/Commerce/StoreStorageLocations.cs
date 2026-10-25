@@ -26,8 +26,7 @@ namespace MaterialCityTycoon.Commerce
     }
 
     /// <summary>
-    /// Registers one store's infrastructure. StoreInventory remains the reserve balance;
-    /// its units are not yet physically allocated to these locations.
+    /// Registers one store's infrastructure, independently of any product quantities.
     /// </summary>
     public sealed class StoreStorageLocations
     {

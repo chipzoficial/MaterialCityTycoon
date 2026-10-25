@@ -35,6 +35,7 @@ namespace MaterialCityTycoon.EditorTests
             storageData.FindProperty("displayName").stringValue = "Estante de Depósito";
             storageData.FindProperty("prefab").objectReferenceValue = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Game/Art/Models/Storage/PF_EstanteDeposito.prefab");
             storageData.FindProperty("displaySlots").arraySize = 0;
+            storageData.FindProperty("storageCapacity").objectReferenceValue = AssetDatabase.LoadAssetAtPath<StorageCapacityDefinition>("Assets/_Game/ScriptableObjects/Furniture/DEF_EstanteDeposito_StorageCapacity.asset");
             SerializedProperty storageAccess = storageData.FindProperty("accessCellOffsets");
             Vector2Int[] bilateralAccess = { new(0, 1), new(1, 1), new(0, -1), new(1, -1) };
             storageAccess.arraySize = bilateralAccess.Length;
@@ -329,6 +330,41 @@ namespace MaterialCityTycoon.EditorTests
                 Assert.That(first, Is.Not.SameAs(second));
             }
             finally { Object.DestroyImmediate(otherOwner); }
+        }
+
+        [Test]
+        public void StoredUnitsSurviveMoveAndCancelAndPreventRemovalUntilReturned()
+        {
+            var product = AssetDatabase.LoadAssetAtPath<MaterialCityTycoon.Commerce.ProductDefinition>("Assets/_Game/ScriptableObjects/Products/DEF_Argamassa.asset");
+            Assert.That(product, Is.Not.Null);
+            Assert.That(storage.StorageCapacity, Is.Not.Null);
+            object state = State("stocked", storage, new Vector2Int(2, 2));
+            Assert.That(Register(state), Is.True);
+            Assert.That(controller.StoreInventory.TryAddUnits(product, 10), Is.True);
+            Assert.That(controller.ShelfInventory.TryTransferToStorage("stocked", "storage_bottom", product, 4), Is.True);
+            Assert.That(Available(storage, new Vector2Int(6, 6), 1, "stocked"), Is.True);
+            typeof(FurniturePlacementController).GetMethod("ApplyFurniturePlacement", Flags)
+                .Invoke(controller, new object[] { state, new Vector2Int(6, 6), 1 });
+            typeof(FurniturePlacementController).GetField("movingFurniture", Flags).SetValue(controller, state);
+            typeof(FurniturePlacementController).GetMethod("CancelFurnitureMove", Flags).Invoke(controller, null);
+            Assert.That(controller.ShelfInventory.GetQuantity("stocked", "storage_bottom", product), Is.EqualTo(4));
+            GridCellPointer pointer = owner.AddComponent<GridCellPointer>();
+            typeof(GridCellPointer).GetField("hasPointedCell", Flags).SetValue(pointer, true);
+            typeof(GridCellPointer).GetField("pointedCell", Flags).SetValue(pointer, new Vector2Int(6, 6));
+            typeof(FurniturePlacementController).GetField("cellPointer", Flags).SetValue(controller, pointer);
+            var remove = typeof(FurniturePlacementController).GetMethod("TryRemoveFurniture", Flags);
+            UnityEngine.TestTools.LogAssert.Expect(LogType.Warning, "Storage shelf 'stocked' must be emptied before removal.");
+            Assert.That((bool)remove.Invoke(controller, null), Is.False);
+            Assert.That(controller.ContainsFurniture("stocked"), Is.True);
+            Assert.That(controller.TryGetFurnitureStorageLocation("stocked", out _), Is.True);
+            Assert.That(controller.TryGetFurnitureAtCell(new Vector2Int(6, 6), out _, out _), Is.True);
+            Assert.That(controller.StoreInventory.GetQuantity(product), Is.EqualTo(6));
+            Assert.That(controller.ShelfInventory.TryReturnToReserve("stocked", "storage_bottom", product, 4), Is.True);
+            Assert.That((bool)remove.Invoke(controller, null), Is.True);
+            Assert.That(controller.ContainsFurniture("stocked"), Is.False);
+            Assert.That(controller.TryGetFurnitureStorageLocation("stocked", out _), Is.False);
+            Assert.That(controller.ShelfInventory.HasStoredUnits("stocked"), Is.False);
+            Assert.That(controller.StoreInventory.GetQuantity(product), Is.EqualTo(10));
         }
 
         private FurnitureDefinition Definition(string name, params Vector2Int[] offsets)

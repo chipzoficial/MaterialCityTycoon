@@ -36,6 +36,7 @@ namespace MaterialCityTycoon.Building
         private readonly FurnitureDisplaySlotInventory displaySlotInventory = new();
         private readonly StoreInventory storeInventory = new();
         private readonly StoreStorageLocations storageLocations = new();
+        private StoreShelfInventory shelfInventory;
         private Collider groundCollider;
         private bool placementModeActive;
         private GameObject previewVisual;
@@ -58,8 +59,19 @@ namespace MaterialCityTycoon.Building
         /// </summary>
         public StoreInventory StoreInventory => storeInventory;
 
-        /// <summary>Storage infrastructure for this store; reserve units are not allocated to it.</summary>
+        /// <summary>Storage infrastructure belonging to this store.</summary>
         public IReadOnlyCollection<StorageLocation> StorageLocations => storageLocations.Locations;
+
+        /// <summary>Units allocated to industrial shelves, separate from the free reserve.</summary>
+        public StoreShelfInventory ShelfInventory => shelfInventory ??= new StoreShelfInventory(
+            storeInventory, storageLocations, ResolveStorageCapacity);
+
+        private StorageCapacityDefinition ResolveStorageCapacity(string furnitureId)
+        {
+            return TryGetFurnitureStorageLocation(furnitureId, out _)
+                && TryGetPlacedFurnitureDefinition(furnitureId, out FurnitureDefinition definition)
+                ? definition.StorageCapacity : null;
+        }
 
         /// <summary>Gets the storage location associated with an industrial shelf's FurnitureId.</summary>
         public bool TryGetFurnitureStorageLocation(string furnitureId, out StorageLocation location)
@@ -550,6 +562,10 @@ namespace MaterialCityTycoon.Building
             {
                 visual.AddComponent<ShelfProductVisualPresenter>().Initialize(this, furniture.id, definition);
             }
+            else if (furniture.typeId == IndustrialStorageShelfTypeId && definition.StorageCapacity != null)
+            {
+                visual.AddComponent<IndustrialStorageVisualPresenter>().Initialize(ShelfInventory, furniture.id, definition.StorageCapacity);
+            }
 
             return true;
         }
@@ -561,6 +577,12 @@ namespace MaterialCityTycoon.Building
                 || string.IsNullOrWhiteSpace(furnitureId)
                 || !furnitureById.TryGetValue(furnitureId, out PlacedFurnitureState furniture))
             {
+                return false;
+            }
+
+            if (ShelfInventory.HasStoredUnits(furniture.id))
+            {
+                Debug.LogWarning($"Storage shelf '{furniture.id}' must be emptied before removal.", this);
                 return false;
             }
 
