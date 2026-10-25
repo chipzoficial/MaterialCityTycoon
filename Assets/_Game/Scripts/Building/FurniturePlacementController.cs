@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using MaterialCityTycoon.Commerce;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace MaterialCityTycoon.Building
 {
@@ -53,6 +55,31 @@ namespace MaterialCityTycoon.Building
         /// Gets whether construction input is currently active.
         /// </summary>
         public bool IsPlacementModeActive => placementModeActive;
+        public bool IsMovingFurnitureActive => IsMovingFurniture;
+        public FurnitureDefinition SelectedFurnitureDefinition => selectedFurnitureDefinition;
+
+        public void SetPlacementMode(bool active)
+        {
+            if (active == placementModeActive || !enabled) return;
+            if (active) EnterPlacementMode(); else ExitPlacementMode();
+        }
+
+        public bool SelectFurnitureDefinition(FurnitureDefinition definition)
+        {
+            if (IsMovingFurniture || definition == null) return false;
+            int index = furnitureDefinitions.IndexOf(definition);
+            if (!TryGetValidFurnitureDefinitionAtIndex(index, out _)) return false;
+            TrySelectFurnitureDefinition(index);
+            return true;
+        }
+
+        public void GetBuildableFurniture(List<FurnitureDefinition> result)
+        {
+            if (result == null) return;
+            result.Clear();
+            for (int i = 0; i < furnitureDefinitions.Count; i++)
+                if (TryGetValidFurnitureDefinitionAtIndex(i, out FurnitureDefinition definition)) result.Add(definition);
+        }
 
         /// <summary>
         /// Gets the store's reserve inventory. Displayed units are tracked separately.
@@ -385,7 +412,8 @@ namespace MaterialCityTycoon.Building
 
             UpdatePlacementPreview();
 
-            if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+            if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame
+                && !IsMouseOverUi(Mouse.current))
             {
                 if (IsMovingFurniture)
                 {
@@ -398,6 +426,17 @@ namespace MaterialCityTycoon.Building
 
                 UpdatePlacementPreview();
             }
+        }
+
+        private static bool IsMouseOverUi(Mouse mouse)
+        {
+            if (EventSystem.current == null) return false;
+            PointerEventData pointer = new(EventSystem.current) { position = mouse.position.ReadValue() };
+            List<RaycastResult> hits = new();
+            EventSystem.current.RaycastAll(pointer, hits);
+            foreach (RaycastResult hit in hits)
+                if (hit.module is GraphicRaycaster) return true;
+            return false;
         }
 
         private void OnDisable()
