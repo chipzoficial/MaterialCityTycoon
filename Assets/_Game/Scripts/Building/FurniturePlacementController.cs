@@ -291,6 +291,12 @@ namespace MaterialCityTycoon.Building
                 : 0;
         }
 
+        /// <summary>Gets the product and quantity recorded in a non-empty display slot.</summary>
+        public bool TryGetDisplayedInventory(string furnitureId, string slotId, out string productId, out int quantity)
+        {
+            return displaySlotInventory.TryGetQuantity(furnitureId, slotId, out productId, out quantity);
+        }
+
         /// <summary>
         /// Transfers compatible assigned product units from the store reserve to a display slot.
         /// </summary>
@@ -328,6 +334,22 @@ namespace MaterialCityTycoon.Building
                     slotId,
                     productDefinition.ProductId,
                     units);
+        }
+
+        /// <summary>Moves allocated units directly to a compatible commercial shelf slot.</summary>
+        public bool TryRestockFromStorage(string storageId, string levelId, string furnitureId, string slotId,
+            ProductDefinition product, int units)
+        {
+            if (product == null || product.ProductId != "argamassa"
+                || !TryGetFurnitureStorageLocation(storageId, out _)
+                || !TryGetPlacedFurnitureDefinition(furnitureId, out FurnitureDefinition furniture)
+                || furniture.FurnitureTypeId != "prototype_shelf"
+                || !TryGetDisplaySlotDefinition(furnitureId, slotId, out DisplaySlotDefinition slot)
+                || !slot.HasConfiguredCapacity
+                || !TryGetAssignedProductForDisplaySlot(furnitureId, slotId, out ProductDefinition assigned)
+                || assigned != product || !DisplaySlotCompatibility.IsCompatible(product, slot)) return false;
+            return ShelfInventory.TryTransferToDisplay(storageId, levelId, product, units,
+                displaySlotInventory, furnitureId, slotId, slot.CapacityUnits);
         }
 
         private void Awake()
@@ -1622,7 +1644,7 @@ namespace MaterialCityTycoon.Building
             return true;
         }
 
-        private bool CanAddUnits(string furnitureId, string slotId, string productId, int units)
+        internal bool CanAddUnits(string furnitureId, string slotId, string productId, int units)
         {
             if (!IsKeyValid(furnitureId, slotId)
                 || string.IsNullOrWhiteSpace(productId)
@@ -1643,7 +1665,7 @@ namespace MaterialCityTycoon.Building
                 && units <= existingQuantity;
         }
 
-        private bool TryAddUnits(string furnitureId, string slotId, string productId, int units)
+        internal bool TryAddUnits(string furnitureId, string slotId, string productId, int units)
         {
             if (!CanAddUnits(furnitureId, slotId, productId, units))
             {

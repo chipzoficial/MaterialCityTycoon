@@ -11,6 +11,8 @@ namespace MaterialCityTycoon.EditorTools
         private int locationIndex;
         private int levelIndex;
         private int units = 1;
+        private int displayIndex;
+        private int displaySlotIndex;
         private string status;
 
         [MenuItem("Tools/Material City Tycoon/Storage Debug")]
@@ -71,6 +73,45 @@ namespace MaterialCityTycoon.EditorTools
                 status = inventory.TryTransferToStorage(selected.Id, levelId, product, units) ? "Transferência concluída." : "Transferência recusada; confira saldo e capacidade.";
             if (GUILayout.Button("Devolver à reserva"))
                 status = inventory.TryReturnToReserve(selected.Id, levelId, product, units) ? "Devolução concluída." : "Devolução recusada; confira quantidade e saldo.";
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Reposição da exposição", EditorStyles.boldLabel);
+            List<string> furnitureIds = new();
+            controller.GetPlacedFurnitureIds(furnitureIds);
+            List<string> displayIds = new();
+            List<string> displayLabels = new();
+            foreach (string id in furnitureIds)
+            {
+                if (controller.TryGetPlacedFurnitureDefinition(id, out FurnitureDefinition candidate)
+                    && candidate.FurnitureTypeId == "prototype_shelf")
+                {
+                    displayIds.Add(id);
+                    displayLabels.Add($"{candidate.DisplayName} ({id})");
+                }
+            }
+            if (displayIds.Count == 0)
+                EditorGUILayout.HelpBox("Construa uma prateleira comercial para selecionar o destino.", MessageType.Info);
+            else
+            {
+                displayIndex = EditorGUILayout.Popup("Prateleira", Mathf.Clamp(displayIndex, 0, displayIds.Count - 1), displayLabels.ToArray());
+                string displayId = displayIds[displayIndex];
+                controller.TryGetPlacedFurnitureDefinition(displayId, out FurnitureDefinition displayDefinition);
+                if (displayDefinition.DisplaySlots.Count > 0)
+                {
+                    string[] slots = new string[displayDefinition.DisplaySlots.Count];
+                    for (int i = 0; i < slots.Length; i++)
+                    {
+                        DisplaySlotDefinition slot = displayDefinition.DisplaySlots[i];
+                        bool assigned = controller.TryGetAssignedProductForDisplaySlot(displayId, slot.SlotId, out ProductDefinition slotProduct);
+                        slots[i] = $"{slot.DisplayName}: {controller.GetDisplayedQuantity(displayId, slot.SlotId)} / {slot.CapacityUnits} — {(assigned ? slotProduct.DisplayName : "sem produto")}";
+                    }
+                    displaySlotIndex = EditorGUILayout.Popup("Slot", Mathf.Clamp(displaySlotIndex, 0, slots.Length - 1), slots);
+                    if (GUILayout.Button("Transferir para exposição"))
+                        status = controller.TryRestockFromStorage(selected.Id, levelId, displayId,
+                            displayDefinition.DisplaySlots[displaySlotIndex].SlotId, product, units)
+                            ? "Reposição concluída." : "Reposição recusada; confira produto, saldo e capacidade.";
+                }
+                else EditorGUILayout.HelpBox("A prateleira não possui slots configurados.", MessageType.Warning);
+            }
             if (!string.IsNullOrEmpty(status)) EditorGUILayout.HelpBox(status, MessageType.Info);
         }
     }

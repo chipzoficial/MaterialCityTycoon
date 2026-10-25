@@ -94,6 +94,36 @@ namespace MaterialCityTycoon.Building
             return true;
         }
 
+        // Caller validates the destination's furniture, slot, assignment and compatibility.
+        internal bool TryTransferToDisplay(string locationId, string levelId, ProductDefinition product, int units,
+            FurnitureDisplaySlotInventory display, string furnitureId, string slotId, int capacityUnits)
+        {
+            if (!locations.TryGet(locationId, out _) || !IsValidProduct(product) || units <= 0 || display == null
+                || capacityUnits <= 0 || !TryGetEntry(locationId, levelId, out Entry entry)
+                || entry.ProductId != product.ProductId || units > entry.Quantity) return false;
+            StorageCapacityDefinition capacity = resolveCapacity(locationId);
+            if (capacity == null || !capacity.TryGetCapacity(levelId, product, out int sourceLimit)
+                || entry.Quantity > sourceLimit
+                || !display.CanAddUnits(furnitureId, slotId, product.ProductId, units)) return false;
+            display.TryGetQuantity(furnitureId, slotId, out _, out int current);
+            if (current > capacityUnits || units > capacityUnits - current) return false;
+
+            // No callbacks or other fallible API calls occur between these two mutations.
+            if (!display.TryAddUnits(furnitureId, slotId, product.ProductId, units)) return false;
+            entry.Quantity -= units;
+            if (entry.Quantity == 0)
+            {
+                Dictionary<string, Entry> levels = allocations[locationId];
+                levels.Remove(levelId);
+                if (levels.Count == 0) allocations.Remove(locationId);
+            }
+            if (Changed != null)
+                foreach (Action<string, string> listener in Changed.GetInvocationList())
+                    try { listener(locationId, levelId); }
+                    catch (Exception error) { UnityEngine.Debug.LogException(error); }
+            return true;
+        }
+
         private bool TryGetEntry(string locationId, string levelId, out Entry entry)
         {
             entry = null;
