@@ -20,6 +20,114 @@ namespace MaterialCityTycoon.EditorTools
             new("shelf_top", "Nível superior", "Shelf_03")
         };
 
+        [MenuItem("Tools/Material City Tycoon/Configure Mortar Display Visual")]
+        public static void ConfigureMortarDisplayVisual()
+        {
+            const string productPath = "Assets/_Game/ScriptableObjects/Products/DEF_Argamassa.asset";
+            const string prefabPath = "Assets/_Game/Prefabs/Products/PF_SacoArgamassa20kg.prefab";
+            ProductDefinition product = AssetDatabase.LoadAssetAtPath<ProductDefinition>(productPath);
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (EditorApplication.isPlayingOrWillChangePlaymode
+                || product == null || !product.IsValid(out _) || product.ProductId != "argamassa"
+                || prefab == null || prefab.GetComponentsInChildren<MeshRenderer>(true).Length == 0
+                || !TryGetShelfDefinition(out FurnitureDefinition shelfDefinition)
+                || !TryGetShelfPrefab(shelfDefinition, out _))
+            {
+                Debug.LogError("A valid Argamassa definition, product prefab, and configured shelf are required outside Play Mode.");
+                return;
+            }
+
+            if (product.DisplayPrefab != null && product.DisplayPrefab != prefab)
+            {
+                Debug.LogError("Argamassa already references a different display prefab; its existing reference was preserved.", product);
+                return;
+            }
+
+            if (product.DisplayPrefab == prefab)
+            {
+                Debug.Log("Argamassa already references the mortar display prefab.", product);
+                return;
+            }
+
+            SerializedObject serializedProduct = new(product);
+            SerializedProperty displayPrefab = serializedProduct.FindProperty("displayPrefab");
+            if (displayPrefab == null)
+            {
+                Debug.LogError("The product display prefab field is unavailable.", product);
+                return;
+            }
+
+            Undo.RecordObject(product, "Configure Mortar Display Visual");
+            displayPrefab.objectReferenceValue = prefab;
+            serializedProduct.ApplyModifiedProperties();
+            EditorUtility.SetDirty(product);
+            AssetDatabase.SaveAssetIfDirty(product);
+            Debug.Log("Argamassa display prefab configured.", product);
+        }
+
+        [MenuItem("Tools/Material City Tycoon/Inspect Mortar Shelf Geometry")]
+        public static void InspectMortarShelfGeometry()
+        {
+            const string productPath = "Assets/_Game/Prefabs/Products/PF_SacoArgamassa20kg.prefab";
+            if (EditorApplication.isPlayingOrWillChangePlaymode
+                || AssetDatabase.LoadAssetAtPath<GameObject>(productPath) == null
+                || !TryGetShelfDefinition(out FurnitureDefinition shelfDefinition)
+                || !TryGetShelfPrefab(shelfDefinition, out _))
+            {
+                Debug.LogError("The mortar prefab and configured shelf must be available outside Play Mode.");
+                return;
+            }
+
+            GameObject product = PrefabUtility.LoadPrefabContents(productPath);
+            GameObject shelf = PrefabUtility.LoadPrefabContents(PrototypeShelfPrefabPath);
+            try
+            {
+                foreach (MeshRenderer renderer in product.GetComponentsInChildren<MeshRenderer>(true))
+                {
+                    LogRendererBounds("Product", product.transform, renderer);
+                    foreach (Material material in renderer.sharedMaterials)
+                    {
+                        Debug.Log($"Product material: {AssetDatabase.GetAssetPath(material)}; shader: {(material != null && material.shader != null ? material.shader.name : "missing")}");
+                    }
+                }
+
+                foreach (MeshRenderer renderer in shelf.GetComponentsInChildren<MeshRenderer>(true))
+                {
+                    LogRendererBounds("Shelf", shelf.transform, renderer);
+                }
+
+                foreach (DisplaySlotDefinition slot in shelfDefinition.DisplaySlots)
+                {
+                    Debug.Log($"Slot {slot.SlotId}: anchor {slot.LocalDisplayPosition.ToString("F5")}");
+                }
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(product);
+                PrefabUtility.UnloadPrefabContents(shelf);
+            }
+        }
+
+        private static void LogRendererBounds(string label, Transform root, MeshRenderer renderer)
+        {
+            Bounds source = renderer.localBounds;
+            Matrix4x4 toRoot = root.worldToLocalMatrix * renderer.localToWorldMatrix;
+            Bounds result = new(toRoot.MultiplyPoint3x4(source.center), Vector3.zero);
+            for (int x = -1; x <= 1; x += 2)
+            {
+                for (int y = -1; y <= 1; y += 2)
+                {
+                    for (int z = -1; z <= 1; z += 2)
+                    {
+                        result.Encapsulate(toRoot.MultiplyPoint3x4(
+                            source.center + Vector3.Scale(source.extents, new Vector3(x, y, z))));
+                    }
+                }
+            }
+
+            Debug.Log($"{label} {renderer.name}: min {result.min.ToString("F5")}, max {result.max.ToString("F5")}, size {result.size.ToString("F5")}");
+        }
+
         [MenuItem("Tools/Material City Tycoon/Configure Prototype Shelf Display Slots")]
         public static void ConfigurePrototypeShelfDisplaySlots()
         {
@@ -55,7 +163,7 @@ namespace MaterialCityTycoon.EditorTools
                 slotProperties.allowedDisplayModes.arraySize = 1;
                 slotProperties.allowedDisplayModes.GetArrayElementAtIndex(0).enumValueIndex = (int)ProductDisplayMode.Stack;
                 slotProperties.localDisplayPosition.vector3Value = slotAnchorPositions[index];
-                slotProperties.capacityUnits.intValue = 0;
+                slotProperties.capacityUnits.intValue = 12;
             }
 
             serializedDefinition.ApplyModifiedProperties();

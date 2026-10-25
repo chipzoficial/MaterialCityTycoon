@@ -12,7 +12,9 @@ namespace MaterialCityTycoon.Building
     public sealed class FurnitureInspectionPanel : MonoBehaviour
     {
         private const float ReadOnlyRowHeight = 58f;
+        private const string CommercialShelfFurnitureTypeId = "prototype_shelf";
         private const float AssignableRowBaseHeight = 80f;
+        private const float AssignableInventoryRowBaseHeight = 124f;
         private const float ProductOptionHeight = 30f;
         private const float ProductOptionSpacing = 4f;
         private const float SlotRowSpacing = 8f;
@@ -55,6 +57,18 @@ namespace MaterialCityTycoon.Building
             {
                 closeButton.onClick.RemoveListener(Hide);
             }
+        }
+
+        private void Update()
+        {
+            if (!IsOpen
+                || furniturePlacementController == null
+                || !furniturePlacementController.ContainsFurniture(selectedFurnitureId))
+            {
+                return;
+            }
+
+            RefreshInventoryBalances();
         }
 
         public void Show(
@@ -105,6 +119,7 @@ namespace MaterialCityTycoon.Building
                 row.slotId = slot.SlotId;
                 row.slotLabel.text = $"{slot.DisplayName}\n{FormatDisplayModes(slot.AllowedDisplayModes)}";
                 row.allowsProductAssignment = canAssignProducts;
+                row.showsInventoryBalance = ShouldShowInventoryBalance(selectedFurnitureDefinition);
                 row.optionsExpanded = false;
                 row.rowObject.SetActive(true);
 
@@ -139,6 +154,12 @@ namespace MaterialCityTycoon.Building
                 rowObject.transform,
                 new Color(0.18f, 0.26f, 0.32f, 1f),
                 out row.productButtonLabel);
+            row.inventoryLabel = CreateText(
+                "InventoryBalance",
+                rowObject.transform,
+                15,
+                new Color(0.72f, 0.8f, 0.86f, 1f));
+            row.inventoryLabel.alignment = TextAnchor.MiddleLeft;
             row.productOptions = CreateUiObject("ProductOptions", rowObject.transform).GetComponent<RectTransform>();
 
             row.productButton.onClick.AddListener(() => ToggleProductOptions(row));
@@ -163,6 +184,7 @@ namespace MaterialCityTycoon.Building
                 row.slotId,
                 row.compatibleProducts);
             UpdateProductButtonLabel(row);
+            UpdateInventoryBalance(row);
             ConfigureProductOptions(row);
         }
 
@@ -178,6 +200,39 @@ namespace MaterialCityTycoon.Building
             }
 
             row.productButtonLabel.text = $"Produto: {productName}";
+        }
+
+        private void RefreshInventoryBalances()
+        {
+            foreach (SlotRowView row in slotRows)
+            {
+                if (row.rowObject.activeSelf && row.showsInventoryBalance)
+                {
+                    UpdateInventoryBalance(row);
+                }
+            }
+        }
+
+        private void UpdateInventoryBalance(SlotRowView row)
+        {
+            row.inventoryLabel.gameObject.SetActive(row.showsInventoryBalance);
+            if (!row.showsInventoryBalance)
+            {
+                return;
+            }
+
+            if (!furniturePlacementController.TryGetAssignedProductForDisplaySlot(
+                    selectedFurnitureId,
+                    row.slotId,
+                    out ProductDefinition productDefinition))
+            {
+                row.inventoryLabel.text = "Sem produto atribuído";
+                return;
+            }
+
+            int displayedQuantity = furniturePlacementController.GetDisplayedQuantity(selectedFurnitureId, row.slotId);
+            int reserveQuantity = furniturePlacementController.StoreInventory.GetQuantity(productDefinition);
+            row.inventoryLabel.text = $"Exposição: {displayedQuantity} unidades\nReserva: {reserveQuantity} unidades";
         }
 
         private void ConfigureProductOptions(SlotRowView row)
@@ -271,11 +326,12 @@ namespace MaterialCityTycoon.Building
                 float productOptionsHeight = row.allowsProductAssignment && row.optionsExpanded
                     ? GetProductOptionsHeight(row)
                     : 0f;
+                float baseRowHeight = GetBaseRowHeight(row);
                 float rowHeight = row.allowsProductAssignment
-                    ? AssignableRowBaseHeight + productOptionsHeight
+                    ? baseRowHeight + productOptionsHeight
                     : ReadOnlyRowHeight;
 
-                ConfigureRowRect(row, verticalOffset, rowHeight, productOptionsHeight);
+                ConfigureRowRect(row, verticalOffset, rowHeight, baseRowHeight, productOptionsHeight);
                 verticalOffset += rowHeight + SlotRowSpacing;
                 activeRowCount++;
             }
@@ -296,16 +352,34 @@ namespace MaterialCityTycoon.Building
             return optionCount * ProductOptionHeight + Mathf.Max(0, optionCount - 1) * ProductOptionSpacing;
         }
 
+        private static float GetBaseRowHeight(SlotRowView row)
+        {
+            if (!row.allowsProductAssignment)
+            {
+                return ReadOnlyRowHeight;
+            }
+
+            return row.showsInventoryBalance
+                ? AssignableInventoryRowBaseHeight
+                : AssignableRowBaseHeight;
+        }
+
         private static void ConfigureRowRect(
             SlotRowView row,
             float verticalOffset,
             float rowHeight,
+            float baseRowHeight,
             float productOptionsHeight)
         {
             RectTransform rowRect = row.rowObject.GetComponent<RectTransform>();
             SetTopStretchRect(rowRect, verticalOffset, rowHeight);
             SetTopStretchRect(row.slotLabel.rectTransform, 0f, 38f);
             SetTopStretchRect(row.productButton.GetComponent<RectTransform>(), 42f, 30f);
+            row.inventoryLabel.gameObject.SetActive(row.showsInventoryBalance);
+            if (row.showsInventoryBalance)
+            {
+                SetTopStretchRect(row.inventoryLabel.rectTransform, 76f, 42f);
+            }
 
             bool showOptions = row.allowsProductAssignment && row.optionsExpanded;
             row.productOptions.gameObject.SetActive(showOptions);
@@ -314,7 +388,7 @@ namespace MaterialCityTycoon.Building
                 return;
             }
 
-            SetTopStretchRect(row.productOptions, AssignableRowBaseHeight, productOptionsHeight);
+            SetTopStretchRect(row.productOptions, baseRowHeight, productOptionsHeight);
             for (int index = 0; index < row.productOptionsButtons.Count; index++)
             {
                 Button optionButton = row.productOptionsButtons[index];
@@ -443,6 +517,12 @@ namespace MaterialCityTycoon.Building
                 && definition.DisplaySlots.Count > 0;
         }
 
+        private static bool ShouldShowInventoryBalance(FurnitureDefinition definition)
+        {
+            return definition != null
+                && definition.FurnitureTypeId == CommercialShelfFurnitureTypeId;
+        }
+
         private sealed class SlotRowView
         {
             public SlotRowView(GameObject rowObject)
@@ -457,8 +537,10 @@ namespace MaterialCityTycoon.Building
             public Text slotLabel;
             public Button productButton;
             public Text productButtonLabel;
+            public Text inventoryLabel;
             public RectTransform productOptions;
             public bool allowsProductAssignment;
+            public bool showsInventoryBalance;
             public bool optionsExpanded;
         }
     }

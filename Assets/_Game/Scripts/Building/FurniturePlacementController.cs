@@ -32,13 +32,15 @@ namespace MaterialCityTycoon.Building
         private readonly Dictionary<Vector2Int, string> occupancyByCell = new();
         private readonly Dictionary<string, GameObject> visualsByFurnitureId = new();
         private readonly FurnitureDisplaySlotAssignments displaySlotAssignments = new();
+        private readonly FurnitureDisplaySlotInventory displaySlotInventory = new();
+        private readonly StoreInventory storeInventory = new();
         private Collider groundCollider;
         private bool placementModeActive;
         private GameObject previewVisual;
         private FurnitureDefinition previewFurnitureDefinition;
         private FurnitureDefinition selectedFurnitureDefinition;
         private bool? previewUsesValidMaterial;
-        private PlacedFurnitureState movingFurniture;
+        [NonSerialized] private PlacedFurnitureState movingFurniture;
         private int nextFurnitureRotationQuarterTurns;
         private int movingFurnitureRotationQuarterTurns;
 
@@ -46,6 +48,11 @@ namespace MaterialCityTycoon.Building
         /// Gets whether construction input is currently active.
         /// </summary>
         public bool IsPlacementModeActive => placementModeActive;
+
+        /// <summary>
+        /// Gets the store's reserve inventory. Displayed units are tracked separately.
+        /// </summary>
+        public StoreInventory StoreInventory => storeInventory;
 
         private bool IsMovingFurniture => movingFurniture != null;
 
@@ -61,6 +68,7 @@ namespace MaterialCityTycoon.Building
             definition = null;
 
             if (!occupancyByCell.TryGetValue(cell, out string occupantId)
+                || string.IsNullOrWhiteSpace(occupantId)
                 || !furnitureById.TryGetValue(occupantId, out PlacedFurnitureState furniture))
             {
                 return false;
@@ -82,6 +90,59 @@ namespace MaterialCityTycoon.Building
         {
             return !string.IsNullOrWhiteSpace(furnitureId)
                 && furnitureById.ContainsKey(furnitureId);
+        }
+
+        /// <summary>
+        /// Copies the valid configured product definitions into the supplied list.
+        /// </summary>
+        public void GetConfiguredProductDefinitions(List<ProductDefinition> configuredProducts)
+        {
+            if (configuredProducts == null)
+            {
+                return;
+            }
+
+            configuredProducts.Clear();
+            for (int index = 0; index < productDefinitions.Count; index++)
+            {
+                ProductDefinition productDefinition = productDefinitions[index];
+                if (IsConfiguredProductDefinition(productDefinition))
+                {
+                    configuredProducts.Add(productDefinition);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Copies the identifiers of currently placed furniture into the supplied list.
+        /// </summary>
+        public void GetPlacedFurnitureIds(List<string> furnitureIds)
+        {
+            if (furnitureIds == null)
+            {
+                return;
+            }
+
+            furnitureIds.Clear();
+            foreach (string furnitureId in furnitureById.Keys)
+            {
+                furnitureIds.Add(furnitureId);
+            }
+
+            furnitureIds.Sort(StringComparer.Ordinal);
+        }
+
+        /// <summary>
+        /// Gets the definition associated with an existing placed furniture instance.
+        /// </summary>
+        public bool TryGetPlacedFurnitureDefinition(
+            string furnitureId,
+            out FurnitureDefinition furnitureDefinition)
+        {
+            furnitureDefinition = null;
+            return !string.IsNullOrWhiteSpace(furnitureId)
+                && furnitureById.TryGetValue(furnitureId, out PlacedFurnitureState furniture)
+                && TryGetFurnitureDefinition(furniture, out furnitureDefinition);
         }
 
         /// <summary>
@@ -141,6 +202,13 @@ namespace MaterialCityTycoon.Building
                 return false;
             }
 
+            if (displaySlotInventory.TryGetQuantity(furnitureId, slotId, out string displayedProductId, out int displayedQuantity)
+                && displayedQuantity > 0
+                && (productDefinition == null || productDefinition.ProductId != displayedProductId))
+            {
+                return false;
+            }
+
             if (productDefinition == null)
             {
                 displaySlotAssignments.RemoveProductId(furnitureId, slotId);
@@ -155,6 +223,55 @@ namespace MaterialCityTycoon.Building
 
             displaySlotAssignments.SetProductId(furnitureId, slotId, productDefinition.ProductId);
             return true;
+        }
+
+        /// <summary>
+        /// Gets the number of units currently displayed in a placed furniture slot.
+        /// </summary>
+        public int GetDisplayedQuantity(string furnitureId, string slotId)
+        {
+            return displaySlotInventory.TryGetQuantity(furnitureId, slotId, out _, out int quantity)
+                ? quantity
+                : 0;
+        }
+
+        /// <summary>
+        /// Transfers compatible assigned product units from the store reserve to a display slot.
+        /// </summary>
+        public bool TryTransferReserveToDisplay(string furnitureId, string slotId, int units)
+        {
+            if (!TryGetAssignedProductForDisplaySlot(furnitureId, slotId, out ProductDefinition productDefinition)
+                || !TryGetPlacedFurnitureDefinition(furnitureId, out FurnitureDefinition furnitureDefinition)
+                || !TryGetDisplaySlotDefinition(furnitureId, slotId, out DisplaySlotDefinition slotDefinition))
+            {
+                return false;
+            }
+
+            int capacity = furnitureDefinition.FurnitureTypeId == "prototype_shelf"
+                && productDefinition.ProductId == "argamassa"
+                ? slotDefinition.CapacityUnits
+                : 0;
+            return displaySlotInventory.TryTransferFromReserve(
+                storeInventory,
+                furnitureId,
+                slotId,
+                productDefinition.ProductId,
+                units,
+                capacity);
+        }
+
+        /// <summary>
+        /// Transfers displayed product units from a slot back to the store reserve.
+        /// </summary>
+        public bool TryTransferDisplayToReserve(string furnitureId, string slotId, int units)
+        {
+            return TryGetAssignedProductForDisplaySlot(furnitureId, slotId, out ProductDefinition productDefinition)
+                && displaySlotInventory.TryTransferToReserve(
+                    storeInventory,
+                    furnitureId,
+                    slotId,
+                    productDefinition.ProductId,
+                    units);
         }
 
         private void Awake()
@@ -261,6 +378,8 @@ namespace MaterialCityTycoon.Building
 
         private void EnterPlacementMode()
         {
+            movingFurniture = null;
+            movingFurnitureRotationQuarterTurns = 0;
             placementModeActive = true;
             EnsurePreviewVisualForSelectedDefinition();
         }
@@ -379,6 +498,11 @@ namespace MaterialCityTycoon.Building
             }
 
             visual.name = $"{furniture.typeId}_{furniture.id}";
+            if (furniture.typeId == "prototype_shelf")
+            {
+                visual.AddComponent<ShelfProductVisualPresenter>().Initialize(this, furniture.id, definition);
+            }
+
             return true;
         }
 
@@ -386,8 +510,17 @@ namespace MaterialCityTycoon.Building
         {
             if (!cellPointer.TryGetPointedCell(out Vector2Int cell)
                 || !occupancyByCell.TryGetValue(cell, out string furnitureId)
+                || string.IsNullOrWhiteSpace(furnitureId)
                 || !furnitureById.TryGetValue(furnitureId, out PlacedFurnitureState furniture))
             {
+                return false;
+            }
+
+            if (!TryReturnDisplayedUnitsToReserve(furniture.id))
+            {
+                Debug.LogWarning(
+                    $"Furniture '{furniture.id}' could not be removed because its displayed inventory could not be returned to the store reserve.",
+                    this);
                 return false;
             }
 
@@ -410,7 +543,9 @@ namespace MaterialCityTycoon.Building
         {
             if (!cellPointer.TryGetPointedCell(out Vector2Int cell)
                 || !occupancyByCell.TryGetValue(cell, out string furnitureId)
+                || string.IsNullOrWhiteSpace(furnitureId)
                 || !furnitureById.TryGetValue(furnitureId, out PlacedFurnitureState furniture)
+                || string.IsNullOrWhiteSpace(furniture.id)
                 || !visualsByFurnitureId.TryGetValue(furniture.id, out GameObject visual)
                 || visual == null)
             {
@@ -425,12 +560,23 @@ namespace MaterialCityTycoon.Building
 
         private bool TryConfirmFurnitureMove()
         {
-            if (movingFurniture == null
-                || !cellPointer.TryGetPointedCell(out Vector2Int destinationAnchor)
+            if (movingFurniture == null)
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(movingFurniture.id)
                 || !furnitureById.TryGetValue(movingFurniture.id, out PlacedFurnitureState furniture)
                 || furniture != movingFurniture
                 || !visualsByFurnitureId.TryGetValue(movingFurniture.id, out GameObject visual)
-                || visual == null
+                || visual == null)
+            {
+                Debug.LogWarning("Furniture move canceled because its registered state or visual is invalid.", this);
+                CancelFurnitureMove();
+                return false;
+            }
+
+            if (!cellPointer.TryGetPointedCell(out Vector2Int destinationAnchor)
                 || !IsFootprintAvailable(
                     destinationAnchor,
                     movingFurniture.width,
@@ -801,6 +947,11 @@ namespace MaterialCityTycoon.Building
             displaySlotAssignments.RemoveFurniture(furniture.id);
         }
 
+        private bool TryReturnDisplayedUnitsToReserve(string furnitureId)
+        {
+            return displaySlotInventory.TryReturnAllToReserve(storeInventory, furnitureId);
+        }
+
         private void ApplyFurniturePlacement(
             PlacedFurnitureState furniture,
             Vector2Int anchorCell,
@@ -1107,5 +1258,280 @@ namespace MaterialCityTycoon.Building
                 productIdsBySlotByFurnitureId.Remove(furnitureId);
             }
         }
+    }
+
+    /// <summary>
+    /// Holds the mutable product quantities currently displayed by placed furniture slots.
+    /// </summary>
+    public sealed class FurnitureDisplaySlotInventory
+    {
+        private readonly Dictionary<string, Dictionary<string, DisplayedSlotInventoryEntry>> entriesBySlotByFurnitureId = new();
+
+        public bool TryGetQuantity(
+            string furnitureId,
+            string slotId,
+            out string productId,
+            out int quantity)
+        {
+            productId = null;
+            quantity = 0;
+            return IsKeyValid(furnitureId, slotId)
+                && entriesBySlotByFurnitureId.TryGetValue(furnitureId, out Dictionary<string, DisplayedSlotInventoryEntry> entriesBySlot)
+                && entriesBySlot.TryGetValue(slotId, out DisplayedSlotInventoryEntry entry)
+                && AssignOutput(entry, out productId, out quantity);
+        }
+
+        public bool TryTransferFromReserve(
+            StoreInventory reserveInventory,
+            string furnitureId,
+            string slotId,
+            string productId,
+            int units,
+            int capacityUnits = 0)
+        {
+            if (reserveInventory == null
+                || capacityUnits < 0
+                || !CanAddUnits(furnitureId, slotId, productId, units)
+                || !reserveInventory.CanRemoveUnits(productId, units))
+            {
+                return false;
+            }
+
+            if (capacityUnits > 0)
+            {
+                TryGetQuantity(furnitureId, slotId, out _, out int displayedQuantity);
+                if (displayedQuantity >= capacityUnits || units > capacityUnits - displayedQuantity)
+                {
+                    return false;
+                }
+            }
+
+            if (!reserveInventory.TryRemoveUnits(productId, units))
+            {
+                return false;
+            }
+
+            if (TryAddUnits(furnitureId, slotId, productId, units))
+            {
+                return true;
+            }
+
+            reserveInventory.TryAddUnits(productId, units);
+            return false;
+        }
+
+        public bool TryTransferToReserve(
+            StoreInventory reserveInventory,
+            string furnitureId,
+            string slotId,
+            string productId,
+            int units)
+        {
+            if (reserveInventory == null
+                || !CanRemoveUnits(furnitureId, slotId, productId, units)
+                || !reserveInventory.CanAddUnits(productId, units))
+            {
+                return false;
+            }
+
+            if (!TryRemoveUnits(furnitureId, slotId, productId, units))
+            {
+                return false;
+            }
+
+            if (reserveInventory.TryAddUnits(productId, units))
+            {
+                return true;
+            }
+
+            TryAddUnits(furnitureId, slotId, productId, units);
+            return false;
+        }
+
+        public void GetEntriesForFurniture(string furnitureId, List<DisplayedSlotInventoryEntry> entries)
+        {
+            if (entries == null)
+            {
+                return;
+            }
+
+            entries.Clear();
+            if (string.IsNullOrWhiteSpace(furnitureId)
+                || !entriesBySlotByFurnitureId.TryGetValue(furnitureId, out Dictionary<string, DisplayedSlotInventoryEntry> entriesBySlot))
+            {
+                return;
+            }
+
+            foreach (DisplayedSlotInventoryEntry entry in entriesBySlot.Values)
+            {
+                entries.Add(entry);
+            }
+        }
+
+        public bool TryReturnAllToReserve(StoreInventory reserveInventory, string furnitureId)
+        {
+            if (reserveInventory == null || string.IsNullOrWhiteSpace(furnitureId))
+            {
+                return false;
+            }
+
+            List<DisplayedSlotInventoryEntry> displayedEntries = new();
+            GetEntriesForFurniture(furnitureId, displayedEntries);
+            if (displayedEntries.Count == 0)
+            {
+                return true;
+            }
+
+            Dictionary<string, int> totalUnitsByProductId = new(StringComparer.Ordinal);
+            foreach (DisplayedSlotInventoryEntry entry in displayedEntries)
+            {
+                int currentTotal = totalUnitsByProductId.TryGetValue(entry.ProductId, out int total)
+                    ? total
+                    : 0;
+                if (currentTotal > int.MaxValue - entry.Quantity)
+                {
+                    return false;
+                }
+
+                totalUnitsByProductId[entry.ProductId] = currentTotal + entry.Quantity;
+            }
+
+            foreach (KeyValuePair<string, int> total in totalUnitsByProductId)
+            {
+                if (!reserveInventory.CanAddUnits(total.Key, total.Value))
+                {
+                    return false;
+                }
+            }
+
+            int returnedEntryCount = 0;
+            foreach (DisplayedSlotInventoryEntry entry in displayedEntries)
+            {
+                if (!TryTransferToReserve(
+                        reserveInventory,
+                        entry.FurnitureId,
+                        entry.SlotId,
+                        entry.ProductId,
+                        entry.Quantity))
+                {
+                    for (int index = 0; index < returnedEntryCount; index++)
+                    {
+                        DisplayedSlotInventoryEntry returnedEntry = displayedEntries[index];
+                        TryTransferFromReserve(
+                            reserveInventory,
+                            returnedEntry.FurnitureId,
+                            returnedEntry.SlotId,
+                            returnedEntry.ProductId,
+                            returnedEntry.Quantity);
+                    }
+
+                    return false;
+                }
+
+                returnedEntryCount++;
+            }
+
+            return true;
+        }
+
+        private bool CanAddUnits(string furnitureId, string slotId, string productId, int units)
+        {
+            if (!IsKeyValid(furnitureId, slotId)
+                || string.IsNullOrWhiteSpace(productId)
+                || units <= 0)
+            {
+                return false;
+            }
+
+            return !TryGetQuantity(furnitureId, slotId, out string existingProductId, out int existingQuantity)
+                || (existingProductId == productId && existingQuantity <= int.MaxValue - units);
+        }
+
+        private bool CanRemoveUnits(string furnitureId, string slotId, string productId, int units)
+        {
+            return units > 0
+                && TryGetQuantity(furnitureId, slotId, out string existingProductId, out int existingQuantity)
+                && existingProductId == productId
+                && units <= existingQuantity;
+        }
+
+        private bool TryAddUnits(string furnitureId, string slotId, string productId, int units)
+        {
+            if (!CanAddUnits(furnitureId, slotId, productId, units))
+            {
+                return false;
+            }
+
+            int updatedQuantity = TryGetQuantity(furnitureId, slotId, out _, out int currentQuantity)
+                ? currentQuantity + units
+                : units;
+            if (!entriesBySlotByFurnitureId.TryGetValue(furnitureId, out Dictionary<string, DisplayedSlotInventoryEntry> entriesBySlot))
+            {
+                entriesBySlot = new Dictionary<string, DisplayedSlotInventoryEntry>();
+                entriesBySlotByFurnitureId.Add(furnitureId, entriesBySlot);
+            }
+
+            entriesBySlot[slotId] = new DisplayedSlotInventoryEntry(furnitureId, slotId, productId, updatedQuantity);
+            return true;
+        }
+
+        private bool TryRemoveUnits(string furnitureId, string slotId, string productId, int units)
+        {
+            if (!CanRemoveUnits(furnitureId, slotId, productId, units)
+                || !entriesBySlotByFurnitureId.TryGetValue(furnitureId, out Dictionary<string, DisplayedSlotInventoryEntry> entriesBySlot)
+                || !entriesBySlot.TryGetValue(slotId, out DisplayedSlotInventoryEntry entry))
+            {
+                return false;
+            }
+
+            int remainingQuantity = entry.Quantity - units;
+            if (remainingQuantity == 0)
+            {
+                entriesBySlot.Remove(slotId);
+                if (entriesBySlot.Count == 0)
+                {
+                    entriesBySlotByFurnitureId.Remove(furnitureId);
+                }
+            }
+            else
+            {
+                entriesBySlot[slotId] = new DisplayedSlotInventoryEntry(
+                    furnitureId,
+                    slotId,
+                    productId,
+                    remainingQuantity);
+            }
+
+            return true;
+        }
+
+        private static bool IsKeyValid(string furnitureId, string slotId)
+        {
+            return !string.IsNullOrWhiteSpace(furnitureId)
+                && !string.IsNullOrWhiteSpace(slotId);
+        }
+
+        private static bool AssignOutput(DisplayedSlotInventoryEntry entry, out string productId, out int quantity)
+        {
+            productId = entry.ProductId;
+            quantity = entry.Quantity;
+            return true;
+        }
+    }
+
+    public readonly struct DisplayedSlotInventoryEntry
+    {
+        public DisplayedSlotInventoryEntry(string furnitureId, string slotId, string productId, int quantity)
+        {
+            FurnitureId = furnitureId;
+            SlotId = slotId;
+            ProductId = productId;
+            Quantity = quantity;
+        }
+
+        public string FurnitureId { get; }
+        public string SlotId { get; }
+        public string ProductId { get; }
+        public int Quantity { get; }
     }
 }
