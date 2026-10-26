@@ -37,6 +37,7 @@ namespace MaterialCityTycoon.EditorTools
     public sealed class StoreDebugWindow : EditorWindow
     {
         private int storeIndex, productIndex, storageIndex, levelIndex, furnitureIndex, slotIndex, units = 1;
+        private int saleFurnitureIndex, saleSlotIndex, saleUnits = 1;
         private Vector2 scroll;
         private string status;
         private MessageType statusType = MessageType.Info;
@@ -67,6 +68,7 @@ namespace MaterialCityTycoon.EditorTools
             DrawStorageDetails(controller);
             DrawDisplayDetails(controller, furnitureIds);
             DrawOperations(controller, products, furnitureIds);
+            DrawSale(controller, furnitureIds);
             EditorGUILayout.Space();
             bool verbose = EditorGUILayout.ToggleLeft("Logs detalhados de layout e visualização", FurnitureInspectionPanel.VerboseDiagnostics);
             FurnitureInspectionPanel.VerboseDiagnostics = verbose;
@@ -208,6 +210,44 @@ namespace MaterialCityTycoon.EditorTools
                         Result(controller.TryTransferReserveToDisplay(displayId, selectedSlot.SlotId, units), "Transferência direta concluída.");
             }
         }
+
+        private void DrawSale(FurniturePlacementController controller, List<string> ids)
+        {
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Venda de teste", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Caixa", FormatMoney(controller.Sales.BalanceCents));
+            var history = controller.Sales.History;
+            if (history.Count > 0)
+            {
+                SaleTransaction last = history[history.Count - 1];
+                EditorGUILayout.LabelField("Última venda", $"{last.ProductId}: {last.Quantity} × {FormatMoney(last.UnitPriceCents)} = {FormatMoney(last.TotalCents)}");
+            }
+
+            var displays = ids.Where(id => controller.TryGetPlacedFurnitureDefinition(id, out FurnitureDefinition f)
+                && f.DisplaySlots.Any(slot => slot != null && controller.TryGetAssignedProductForDisplaySlot(id, slot.SlotId, out _))).ToList();
+            if (displays.Count == 0)
+            {
+                EditorGUILayout.HelpBox("Nenhum slot com produto atribuído.", MessageType.Info);
+                return;
+            }
+            saleFurnitureIndex = EditorGUILayout.Popup("Móvel", Clamp(saleFurnitureIndex, displays.Count), displays.Select(id =>
+            { controller.TryGetPlacedFurnitureDefinition(id, out FurnitureDefinition f); return $"{f.DisplayName} ({id})"; }).ToArray());
+            string furnitureId = displays[saleFurnitureIndex];
+            controller.TryGetPlacedFurnitureDefinition(furnitureId, out FurnitureDefinition definition);
+            var slots = definition.DisplaySlots.Where(slot => slot != null && controller.TryGetAssignedProductForDisplaySlot(furnitureId, slot.SlotId, out _)).ToList();
+            saleSlotIndex = EditorGUILayout.Popup("Slot", Clamp(saleSlotIndex, slots.Count), slots.Select(slot =>
+            { controller.TryGetAssignedProductForDisplaySlot(furnitureId, slot.SlotId, out ProductDefinition p); return $"{slot.DisplayName} — {p.DisplayName}"; }).ToArray());
+            saleUnits = EditorGUILayout.IntField("Quantidade vendida", saleUnits);
+            if (GUILayout.Button("Simular venda"))
+            {
+                bool success = controller.Sales.TrySell(furnitureId, slots[saleSlotIndex].SlotId, saleUnits, out string reason);
+                status = success ? "Venda concluída." : $"Venda recusada: {reason}";
+                statusType = success ? MessageType.Info : MessageType.Warning;
+                Repaint();
+            }
+        }
+
+        private static string FormatMoney(long cents) => $"R$ {cents / 100},{cents % 100:00}";
 
         private void Result(bool succeeded, string message)
         {

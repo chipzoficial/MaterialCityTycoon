@@ -18,3 +18,4 @@ MonoBehaviour:
   sellingUnit: 3
   allowedDisplayModes: 00000000i
   displayPrefab: {fileID: 4403966060287700540, guid: eda67274cc07b6b4eaebcd9dd3ece6be, type: 3}
+  salePriceCents: 2500

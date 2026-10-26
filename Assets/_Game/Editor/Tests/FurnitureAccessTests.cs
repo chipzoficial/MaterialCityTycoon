@@ -698,6 +698,76 @@ namespace MaterialCityTycoon.EditorTests
             Assert.That(bypass.Total, Is.EqualTo(20));
         }
 
+        [Test]
+        public void SalesConsumeOnlyDisplayCreditCashAndUpdateNeeds()
+        {
+            var product = PrepareRestocking();
+            var price = typeof(MaterialCityTycoon.Commerce.ProductDefinition).GetField("salePriceCents", Flags);
+            long oldPrice = (long)price.GetValue(product);
+            try
+            {
+                price.SetValue(product, 2500L);
+                Assert.That(controller.StoreInventory.TryAddUnits(product, 20), Is.True);
+                Assert.That(controller.ShelfInventory.TryTransferToStorage("storage-a", "storage_bottom", product, 8), Is.True);
+                Assert.That(controller.TryRestockFromStorage("storage-a", "storage_bottom", "display-a", "shelf_bottom", product, 5), Is.True);
+                Assert.That(controller.Sales.TrySell("display-a", "shelf_bottom", 1, out _), Is.True);
+                Assert.That(controller.Sales.TrySell("display-a", "shelf_bottom", 2, out _), Is.True);
+                Assert.That(controller.GetDisplayedQuantity("display-a", "shelf_bottom"), Is.EqualTo(2));
+                Assert.That(controller.StoreInventory.GetQuantity(product), Is.EqualTo(12));
+                Assert.That(controller.ShelfInventory.GetQuantity("storage-a", "storage_bottom", product), Is.EqualTo(3));
+                Assert.That(controller.Sales.BalanceCents, Is.EqualTo(7500));
+                Assert.That(controller.Sales.History.Count, Is.EqualTo(2));
+                var transaction = controller.Sales.History[1];
+                Assert.That(transaction.FurnitureId, Is.EqualTo("display-a"));
+                Assert.That(transaction.SlotId, Is.EqualTo("shelf_bottom"));
+                Assert.That(transaction.ProductId, Is.EqualTo(product.ProductId));
+                Assert.That(transaction.Quantity, Is.EqualTo(2));
+                Assert.That(transaction.UnitPriceCents, Is.EqualTo(2500));
+                Assert.That(transaction.TotalCents, Is.EqualTo(5000));
+                Assert.That(new ReplenishmentNeedsService(controller).GetNeeds().Single(n => n.SlotId == "shelf_bottom").Displayed, Is.EqualTo(2));
+            }
+            finally { price.SetValue(product, oldPrice); }
+        }
+
+        [Test]
+        public void RejectedSalesLeaveInventoryCashAndHistoryUnchanged()
+        {
+            var product = PrepareRestocking();
+            var price = typeof(MaterialCityTycoon.Commerce.ProductDefinition).GetField("salePriceCents", Flags);
+            long oldPrice = (long)price.GetValue(product);
+            try
+            {
+                controller.StoreInventory.TryAddUnits(product, 3);
+                controller.TryTransferReserveToDisplay("display-a", "shelf_bottom", 3);
+                price.SetValue(product, 2500L);
+                Assert.That(controller.Sales.TrySell("display-a", "shelf_bottom", 0, out _), Is.False);
+                Assert.That(controller.Sales.TrySell("display-a", "shelf_bottom", -1, out _), Is.False);
+                Assert.That(controller.Sales.TrySell("display-a", "shelf_bottom", 4, out _), Is.False);
+                Assert.That(controller.Sales.TrySell(null, "shelf_bottom", 1, out _), Is.False);
+                Assert.That(controller.Sales.TrySell("display-a", "missing", 1, out _), Is.False);
+                Assert.That(controller.Sales.TrySell("display-a", "shelf_top", 1, out _), Is.False);
+                price.SetValue(product, 0L);
+                Assert.That(controller.Sales.TrySell("display-a", "shelf_bottom", 1, out _), Is.False);
+                price.SetValue(product, -1L);
+                Assert.That(controller.Sales.TrySell("display-a", "shelf_bottom", 1, out _), Is.False);
+                price.SetValue(product, long.MaxValue);
+                Assert.That(controller.Sales.TrySell("display-a", "shelf_bottom", 2, out _), Is.False);
+                Assert.That(controller.GetDisplayedQuantity("display-a", "shelf_bottom"), Is.EqualTo(3));
+                Assert.That(controller.Sales.BalanceCents, Is.Zero);
+                Assert.That(controller.Sales.History, Is.Empty);
+                Assert.That(controller.Sales.TrySell("display-a", "shelf_bottom", 1, out _), Is.True);
+                Assert.That(controller.Sales.TrySell("display-a", "shelf_bottom", 1, out _), Is.False);
+                Assert.That(controller.GetDisplayedQuantity("display-a", "shelf_bottom"), Is.EqualTo(2));
+                Assert.That(controller.Sales.BalanceCents, Is.EqualTo(long.MaxValue));
+                Assert.That(controller.Sales.History.Count, Is.EqualTo(1));
+                var other = new GameObject("Other store");
+                other.SetActive(false);
+                try { Assert.That(other.AddComponent<FurniturePlacementController>().Sales.BalanceCents, Is.Zero); }
+                finally { Object.DestroyImmediate(other); }
+            }
+            finally { price.SetValue(product, oldPrice); }
+        }
+
         private MaterialCityTycoon.Commerce.ProductDefinition PrepareRestocking()
         {
             var product = AssetDatabase.LoadAssetAtPath<MaterialCityTycoon.Commerce.ProductDefinition>("Assets/_Game/ScriptableObjects/Products/DEF_Argamassa.asset");
