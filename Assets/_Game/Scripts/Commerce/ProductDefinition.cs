@@ -33,6 +33,7 @@ namespace MaterialCityTycoon.Commerce
         [SerializeField] private ProductSellingUnit sellingUnit = ProductSellingUnit.Unit;
         [SerializeField] private ProductDisplayMode[] allowedDisplayModes = Array.Empty<ProductDisplayMode>();
         [SerializeField] private GameObject displayPrefab;
+        [SerializeField, Min(0)] private long salePriceCents;
 
         public string ProductId => productId;
         public string DisplayName => displayName;
@@ -40,6 +41,8 @@ namespace MaterialCityTycoon.Commerce
         public ProductSellingUnit SellingUnit => sellingUnit;
         public IReadOnlyList<ProductDisplayMode> AllowedDisplayModes => allowedDisplayModes;
         public GameObject DisplayPrefab => displayPrefab;
+        /// <summary>Zero means that a sale price has not yet been configured.</summary>
+        public long SalePriceCents => salePriceCents;
 
         public bool IsValid(out string validationMessage)
         {

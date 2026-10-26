@@ -37,6 +37,7 @@ namespace MaterialCityTycoon.Building
         private readonly FurnitureDisplaySlotAssignments displaySlotAssignments = new();
         private readonly FurnitureDisplaySlotInventory displaySlotInventory = new();
         private readonly StoreInventory storeInventory = new();
+        private StoreSalesService sales;
         private readonly StoreStorageLocations storageLocations = new();
         private StoreShelfInventory shelfInventory;
         private Collider groundCollider;
@@ -85,6 +86,16 @@ namespace MaterialCityTycoon.Building
         /// Gets the store's reserve inventory. Displayed units are tracked separately.
         /// </summary>
         public StoreInventory StoreInventory => storeInventory;
+
+        /// <summary>Sales and cash for this store instance.</summary>
+        public StoreSalesService Sales => sales ??= new StoreSalesService(displaySlotInventory, ResolveSaleProduct);
+
+        private ProductDefinition ResolveSaleProduct(string furnitureId, string slotId)
+        {
+            return TryGetDisplaySlotDefinition(furnitureId, slotId, out DisplaySlotDefinition slot)
+                && TryGetAssignedProductForDisplaySlot(furnitureId, slotId, out ProductDefinition product)
+                && DisplaySlotCompatibility.IsCompatible(product, slot) ? product : null;
+        }
 
         /// <summary>Storage infrastructure belonging to this store.</summary>
         public IReadOnlyCollection<StorageLocation> StorageLocations => storageLocations.Locations;
@@ -1685,7 +1696,7 @@ namespace MaterialCityTycoon.Building
             return true;
         }
 
-        private bool TryRemoveUnits(string furnitureId, string slotId, string productId, int units)
+        internal bool TryRemoveUnits(string furnitureId, string slotId, string productId, int units)
         {
             if (!CanRemoveUnits(furnitureId, slotId, productId, units)
                 || !entriesBySlotByFurnitureId.TryGetValue(furnitureId, out Dictionary<string, DisplayedSlotInventoryEntry> entriesBySlot)

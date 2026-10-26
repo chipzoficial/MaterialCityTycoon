@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using MaterialCityTycoon.Building;
@@ -555,6 +555,147 @@ namespace MaterialCityTycoon.EditorTests
             object state = ((System.Collections.IDictionary)typeof(FurniturePlacementController).GetField("furnitureById", Flags).GetValue(controller))["display-a"];
             typeof(FurniturePlacementController).GetMethod("UnregisterFurniture", Flags).Invoke(controller, new[] { state });
             Assert.That(service.GetNeeds(), Is.Empty);
+        }
+
+        [Test]
+        public void PlanSharesTwelveUnitsAcrossTwoTenUnitNeedsWithoutChangingInventory()
+        {
+            var product = PrepareRestocking();
+            Assert.That(Register(State("display-b", shelf, new Vector2Int(5, 12))), Is.True);
+            Assert.That(controller.TryAssignProductToDisplaySlot("display-b", "shelf_bottom", product), Is.True);
+            Assert.That(controller.StoreInventory.TryAddUnits(product, 20), Is.True);
+            Assert.That(controller.TryTransferReserveToDisplay("display-a", "shelf_bottom", 2), Is.True);
+            Assert.That(controller.TryTransferReserveToDisplay("display-b", "shelf_bottom", 2), Is.True);
+            Assert.That(controller.ShelfInventory.TryTransferToStorage("storage-a", "storage_bottom", product, 12), Is.True);
+            var service = new ReplenishmentPlanService(controller);
+            ReplenishmentPlan first = service.CreatePlan();
+            ReplenishmentPlan second = service.CreatePlan();
+            Assert.That(first.Lines.Count, Is.EqualTo(2));
+            Assert.That(first.Lines.Select(line => line.FurnitureId), Is.EqualTo(new[] { "display-a", "display-b" }));
+            Assert.That(first.Lines.Select(line => line.Quantity), Is.EqualTo(new[] { 10, 2 }));
+            Assert.That(first.Lines.Sum(line => line.Quantity), Is.EqualTo(12));
+            Assert.That(first.UnmetNeeds.Single().FurnitureId, Is.EqualTo("display-b"));
+            Assert.That(first.UnmetNeeds.Single().Quantity, Is.EqualTo(8));
+            Assert.That(second.Lines.Select(line => line.Quantity), Is.EqualTo(first.Lines.Select(line => line.Quantity)));
+            Assert.That(controller.StoreInventory.GetQuantity(product), Is.EqualTo(4));
+            Assert.That(controller.ShelfInventory.GetQuantity("storage-a", "storage_bottom", product), Is.EqualTo(12));
+            Assert.That(controller.GetDisplayedQuantity("display-a", "shelf_bottom"), Is.EqualTo(2));
+            Assert.That(controller.GetDisplayedQuantity("display-b", "shelf_bottom"), Is.EqualTo(2));
+            Assert.That(controller.TryRestockFromStorage("storage-a", "storage_bottom", "display-a", "shelf_bottom", product, 4), Is.True);
+            var updated = service.CreatePlan();
+            Assert.That(updated.Lines.Sum(line => line.Quantity), Is.EqualTo(8));
+            Assert.That(updated.Lines[0].Quantity, Is.EqualTo(6));
+            Assert.That(first.Lines[0].Quantity, Is.EqualTo(10));
+        }
+
+        [Test]
+        public void PlanCombinesOrderedLevelsAndStorageShelvesWithinCapacity()
+        {
+            var product = PrepareRestocking();
+            Assert.That(Register(State("storage-b", storage, new Vector2Int(10, 8))), Is.True);
+            controller.StoreInventory.TryAddUnits(product, 20);
+            Assert.That(controller.ShelfInventory.TryTransferToStorage("storage-b", "storage_bottom", product, 7), Is.True);
+            Assert.That(controller.ShelfInventory.TryTransferToStorage("storage-a", "storage_middle", product, 4), Is.True);
+            Assert.That(controller.ShelfInventory.TryTransferToStorage("storage-a", "storage_bottom", product, 3), Is.True);
+            ReplenishmentPlan plan = new ReplenishmentPlanService(controller).CreatePlan();
+            Assert.That(plan.Lines.Count, Is.EqualTo(3));
+            Assert.That(plan.Lines.Select(line => line.StorageId), Is.EqualTo(new[] { "storage-a", "storage-a", "storage-b" }));
+            Assert.That(plan.Lines.Select(line => line.LevelId), Is.EqualTo(new[] { "storage_bottom", "storage_middle", "storage_bottom" }));
+            Assert.That(plan.Lines.Select(line => line.Quantity), Is.EqualTo(new[] { 3, 4, 5 }));
+            Assert.That(plan.Lines.Sum(line => line.Quantity), Is.EqualTo(12));
+            Assert.That(plan.UnmetNeeds, Is.Empty);
+            Assert.That(controller.ShelfInventory.GetTotalStored(product), Is.EqualTo(14));
+        }
+
+        [Test]
+        public void PlanSortsSlotsOfSameFurnitureAndDoesNotDoubleCountSource()
+        {
+            var product = PrepareRestocking();
+            Assert.That(controller.TryAssignProductToDisplaySlot("display-a", "shelf_top", product), Is.True);
+            Assert.That(controller.TryAssignProductToDisplaySlot("display-a", "shelf_middle", product), Is.True);
+            controller.StoreInventory.TryAddUnits(product, 14);
+            Assert.That(controller.ShelfInventory.TryTransferToStorage("storage-a", "storage_bottom", product, 14), Is.True);
+            var plan = new ReplenishmentPlanService(controller).CreatePlan();
+            Assert.That(plan.Lines.Select(line => line.SlotId), Is.EqualTo(new[] { "shelf_bottom", "shelf_middle" }));
+            Assert.That(plan.Lines.Select(line => line.Quantity), Is.EqualTo(new[] { 12, 2 }));
+            Assert.That(plan.UnmetNeeds.Select(need => need.Quantity), Is.EqualTo(new[] { 10, 12 }));
+            Assert.That(controller.ShelfInventory.GetTotalStored(product), Is.EqualTo(14));
+        }
+
+        [Test]
+        public void PlanReportsMissingStockAndIgnoresFullUnassignedAndIncompatibleSlots()
+        {
+            var product = PrepareRestocking();
+            var service = new ReplenishmentPlanService(controller);
+            controller.StoreInventory.TryAddUnits(product, 30);
+            var empty = service.CreatePlan();
+            Assert.That(empty.Lines, Is.Empty);
+            Assert.That(empty.UnmetNeeds.Single().Quantity, Is.EqualTo(12));
+            Assert.That(controller.TryTransferReserveToDisplay("display-a", "shelf_bottom", 12), Is.True);
+            Assert.That(service.CreatePlan().Lines, Is.Empty);
+            Assert.That(service.CreatePlan().UnmetNeeds, Is.Empty);
+            Assert.That(controller.TryTransferDisplayToReserve("display-a", "shelf_bottom", 12), Is.True);
+            Assert.That(controller.TryAssignProductToDisplaySlot("display-a", "shelf_bottom", null), Is.True);
+            Assert.That(service.CreatePlan().UnmetNeeds, Is.Empty);
+            Assert.That(controller.TryAssignProductToDisplaySlot("display-a", "shelf_bottom", product), Is.True);
+            var data = new SerializedObject(shelf);
+            data.FindProperty("displaySlots").GetArrayElementAtIndex(0).FindPropertyRelative("allowedDisplayModes")
+                .GetArrayElementAtIndex(0).enumValueIndex = (int)MaterialCityTycoon.Commerce.ProductDisplayMode.Hang;
+            data.ApplyModifiedPropertiesWithoutUndo();
+            Assert.That(service.CreatePlan().UnmetNeeds, Is.Empty);
+        }
+
+        [Test]
+        public void PlansAreIsolatedBetweenStoresEvenWithSameIds()
+        {
+            var product = PrepareRestocking();
+            controller.StoreInventory.TryAddUnits(product, 5);
+            controller.ShelfInventory.TryTransferToStorage("storage-a", "storage_bottom", product, 5);
+            GameObject other = new("other store"); other.SetActive(false);
+            try
+            {
+                var otherController = other.AddComponent<FurniturePlacementController>();
+                typeof(FurniturePlacementController).GetField("constructionGrid", Flags).SetValue(otherController, other.AddComponent<ConstructionGrid>());
+                ((List<FurnitureDefinition>)typeof(FurniturePlacementController).GetField("furnitureDefinitions", Flags).GetValue(otherController)).Add(shelf);
+                ((List<MaterialCityTycoon.Commerce.ProductDefinition>)typeof(FurniturePlacementController).GetField("productDefinitions", Flags).GetValue(otherController)).Add(product);
+                Assert.That((bool)typeof(FurniturePlacementController).GetMethod("TryRegisterFurniture", Flags)
+                    .Invoke(otherController, new[] { State("display-a", shelf, new Vector2Int(6, 2)) }), Is.True);
+                Assert.That(otherController.TryAssignProductToDisplaySlot("display-a", "shelf_bottom", product), Is.True);
+                var otherPlan = new ReplenishmentPlanService(otherController).CreatePlan();
+                Assert.That(otherPlan.Lines, Is.Empty);
+                Assert.That(otherPlan.UnmetNeeds.Single().Quantity, Is.EqualTo(12));
+                Assert.That(new ReplenishmentPlanService(controller).CreatePlan().Lines.Single().Quantity, Is.EqualTo(5));
+            }
+            finally { Object.DestroyImmediate(other); }
+        }
+
+        [Test]
+        public void StoreDebugBalancesReflectTransfersAndRejectedOperations()
+        {
+            var product = PrepareRestocking();
+            Assert.That(controller.StoreInventory.TryAddUnits(product, 20), Is.True);
+            Assert.That(controller.ShelfInventory.TryTransferToStorage("storage-a", "storage_bottom", product, 10), Is.True);
+            Assert.That(controller.TryRestockFromStorage("storage-a", "storage_bottom", "display-a", "shelf_bottom", product, 4), Is.True);
+            Assert.That(controller.TryTransferDisplayToReserve("display-a", "shelf_bottom", 2), Is.True);
+
+            var balances = MaterialCityTycoon.EditorTools.StoreDebugData.GetBalances(controller, product);
+            Assert.That(balances.Reserve, Is.EqualTo(12));
+            Assert.That(balances.Storage, Is.EqualTo(6));
+            Assert.That(balances.Display, Is.EqualTo(2));
+            Assert.That(balances.Total, Is.EqualTo(20));
+
+            Assert.That(controller.TryRestockFromStorage("storage-a", "storage_bottom", "display-a", "shelf_bottom", product, 7), Is.False);
+            var unchanged = MaterialCityTycoon.EditorTools.StoreDebugData.GetBalances(controller, product);
+            Assert.That(unchanged.Reserve, Is.EqualTo(balances.Reserve));
+            Assert.That(unchanged.Storage, Is.EqualTo(balances.Storage));
+            Assert.That(unchanged.Display, Is.EqualTo(balances.Display));
+            Assert.That(unchanged.Total, Is.EqualTo(balances.Total));
+
+            Assert.That(controller.TryTransferReserveToDisplay("display-a", "shelf_bottom", 2), Is.True);
+            var bypass = MaterialCityTycoon.EditorTools.StoreDebugData.GetBalances(controller, product);
+            Assert.That(bypass.Reserve, Is.EqualTo(10));
+            Assert.That(bypass.Display, Is.EqualTo(4));
+            Assert.That(bypass.Total, Is.EqualTo(20));
         }
 
         private MaterialCityTycoon.Commerce.ProductDefinition PrepareRestocking()

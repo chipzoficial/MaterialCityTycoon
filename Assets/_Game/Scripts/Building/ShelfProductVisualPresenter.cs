@@ -8,6 +8,7 @@ namespace MaterialCityTycoon.Building
     /// <summary>Shows the mortar units exposed by one constructed commercial shelf.</summary>
     public sealed class ShelfProductVisualPresenter : MonoBehaviour
     {
+        public static bool VerboseDiagnostics { get; set; }
         private const float GeometryTolerance = 0.0001f;
         private const float AnchorTolerance = 0.002f;
         private const int StackCount = 3;
@@ -219,7 +220,8 @@ namespace MaterialCityTycoon.Building
                 }
             }
 
-            Debug.Log($"Shelf '{furnitureId}', slot '{slot.definition.SlotId}': visual stacks fit {slot.positions.Count} mortar bag(s).", this);
+            if (VerboseDiagnostics)
+                Debug.Log($"Shelf '{furnitureId}', slot '{slot.definition.SlotId}': visual stacks fit {slot.positions.Count} mortar bag(s).", this);
             if (slot.positions.Count < StackCount * StackLayers)
             {
                 Debug.LogWarning($"Shelf slot '{slot.definition.SlotId}' cannot fit three stacks of four bags without overlapping the shelf. The logical capacity is unchanged.", this);

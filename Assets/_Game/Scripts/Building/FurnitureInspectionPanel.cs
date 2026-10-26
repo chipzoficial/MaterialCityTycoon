@@ -11,6 +11,7 @@ namespace MaterialCityTycoon.Building
     /// </summary>
     public sealed class FurnitureInspectionPanel : MonoBehaviour
     {
+        public static bool VerboseDiagnostics { get; set; }
         private const float ReadOnlyRowHeight = 58f;
         private const string CommercialShelfFurnitureTypeId = "prototype_shelf";
         private const float AssignableRowBaseHeight = 80f;
@@ -134,9 +135,10 @@ namespace MaterialCityTycoon.Building
 
             RefreshSlotRowsLayout();
             slotsScrollRect.verticalNormalizedPosition = 1f;
-            Debug.Log(
-                $"Furniture inspection received {receivedSlotCount} slots for '{selectedFurnitureDefinition.DisplayName}' and created {createdRowCount} new visual rows ({activeRowCount} active).",
-                this);
+            if (VerboseDiagnostics)
+                Debug.Log(
+                    $"Furniture inspection received {receivedSlotCount} slots for '{selectedFurnitureDefinition.DisplayName}' and created {createdRowCount} new visual rows ({activeRowCount} active).",
+                    this);
         }
 
         private SlotRowView GetOrCreateSlotRow(int index, ref int createdRowCount)
@@ -343,7 +345,7 @@ namespace MaterialCityTycoon.Building
             slotsContent.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, contentHeight);
             Canvas.ForceUpdateCanvases();
 
-            LogSlotLayout(activeRowCount);
+            if (VerboseDiagnostics) LogSlotLayout(activeRowCount);
         }
 
         private static float GetProductOptionsHeight(SlotRowView row)
