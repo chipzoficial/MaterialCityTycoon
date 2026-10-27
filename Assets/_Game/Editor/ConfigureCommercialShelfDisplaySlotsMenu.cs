@@ -11,7 +11,7 @@ namespace MaterialCityTycoon.EditorTools
     {
         private const string CommercialShelfDefinitionPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_CommercialShelf.asset";
         private const string CommercialShelfPrefabPath = "Assets/_Game/Prefabs/Building/PF_CommercialShelf.prefab";
-        private const string CommercialShelfFurnitureTypeId = "prototype_shelf";
+        private const string CommercialShelfFurnitureTypeId = FurnitureTypeIds.CommercialShelf;
 
         private static readonly SlotConfiguration[] ShelfSlots =
         {

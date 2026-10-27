@@ -93,12 +93,12 @@ namespace MaterialCityTycoon.EditorTests
         }
 
         [Test]
-        public void ExistingOrganizerDefinitionPreservesLegacyIdsFootprintAndAccess()
+        public void ExistingOrganizerDefinitionPreservesConfiguredTypeIdFootprintAndAccess()
         {
             FurnitureDefinition definition = AssetDatabase.LoadAssetAtPath<FurnitureDefinition>(
                 "Assets/_Game/ScriptableObjects/Furniture/DEF_PartsBinRack.asset");
             Assert.That(definition, Is.Not.Null);
-            Assert.That(definition.FurnitureTypeId, Is.EqualTo("prototype_parts_bin_rack"));
+            Assert.That(definition.FurnitureTypeId, Is.EqualTo(FurnitureTypeIds.PartsBinRack));
             Assert.That(definition.Width, Is.EqualTo(2));
             Assert.That(definition.Depth, Is.EqualTo(1));
             Assert.That(definition.AccessCellOffsets, Is.EquivalentTo(new[] { new Vector2Int(0, 1), new Vector2Int(1, 1) }));

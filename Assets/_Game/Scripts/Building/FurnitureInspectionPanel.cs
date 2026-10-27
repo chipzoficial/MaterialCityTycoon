@@ -13,7 +13,6 @@ namespace MaterialCityTycoon.Building
     {
         public static bool VerboseDiagnostics { get; set; }
         private const float ReadOnlyRowHeight = 58f;
-        private const string CommercialShelfFurnitureTypeId = "prototype_shelf";
         private const float AssignableRowBaseHeight = 80f;
         private const float AssignableInventoryRowBaseHeight = 124f;
         private const float ProductOptionHeight = 30f;
@@ -522,7 +521,7 @@ namespace MaterialCityTycoon.Building
         private static bool ShouldShowInventoryBalance(FurnitureDefinition definition)
         {
             return definition != null
-                && definition.FurnitureTypeId == CommercialShelfFurnitureTypeId;
+                && definition.FurnitureTypeId == FurnitureTypeIds.CommercialShelf;
         }
 
         private sealed class SlotRowView

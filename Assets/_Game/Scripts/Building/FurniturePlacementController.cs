@@ -14,7 +14,6 @@ namespace MaterialCityTycoon.Building
     public sealed class FurniturePlacementController : MonoBehaviour
     {
         private const int QuarterTurnCount = 4;
-        private const string IndustrialStorageShelfTypeId = "industrial_storage_shelf";
 
         [Header("References")]
         [SerializeField] private ConstructionGrid constructionGrid;
@@ -132,7 +131,7 @@ namespace MaterialCityTycoon.Building
             location = null;
             return !string.IsNullOrWhiteSpace(furnitureId)
                 && furnitureById.TryGetValue(furnitureId, out PlacedFurnitureState furniture)
-                && furniture.typeId == IndustrialStorageShelfTypeId
+                && furniture.typeId == FurnitureTypeIds.IndustrialStorageShelf
                 && storageLocations.TryGet(furnitureId, out location);
         }
 
@@ -335,7 +334,7 @@ namespace MaterialCityTycoon.Building
                 return false;
             }
 
-            int capacity = furnitureDefinition.FurnitureTypeId == "prototype_shelf"
+            int capacity = furnitureDefinition.FurnitureTypeId == FurnitureTypeIds.CommercialShelf
                 && productDefinition.ProductId == "argamassa"
                 ? slotDefinition.CapacityUnits
                 : 0;
@@ -369,7 +368,7 @@ namespace MaterialCityTycoon.Building
             if (product == null || product.ProductId != "argamassa"
                 || !TryGetFurnitureStorageLocation(storageId, out _)
                 || !TryGetPlacedFurnitureDefinition(furnitureId, out FurnitureDefinition furniture)
-                || furniture.FurnitureTypeId != "prototype_shelf"
+                || furniture.FurnitureTypeId != FurnitureTypeIds.CommercialShelf
                 || !TryGetDisplaySlotDefinition(furnitureId, slotId, out DisplaySlotDefinition slot)
                 || !slot.HasConfiguredCapacity
                 || !TryGetAssignedProductForDisplaySlot(furnitureId, slotId, out ProductDefinition assigned)
@@ -652,11 +651,11 @@ namespace MaterialCityTycoon.Building
             }
 
             visual.name = $"{furniture.typeId}_{furniture.id}";
-            if (furniture.typeId == "prototype_shelf")
+            if (furniture.typeId == FurnitureTypeIds.CommercialShelf)
             {
                 visual.AddComponent<ShelfProductVisualPresenter>().Initialize(this, furniture.id, definition);
             }
-            else if (furniture.typeId == IndustrialStorageShelfTypeId && definition.StorageCapacity != null)
+            else if (furniture.typeId == FurnitureTypeIds.IndustrialStorageShelf && definition.StorageCapacity != null)
             {
                 visual.AddComponent<IndustrialStorageVisualPresenter>().Initialize(ShelfInventory, furniture.id, definition.StorageCapacity);
             }
@@ -1110,7 +1109,7 @@ namespace MaterialCityTycoon.Building
                 return false;
             }
 
-            if (furniture.typeId == IndustrialStorageShelfTypeId
+            if (furniture.typeId == FurnitureTypeIds.IndustrialStorageShelf
                 && !storageLocations.TryRegister(new StorageLocation(furniture.id,
                     string.IsNullOrWhiteSpace(definition.DisplayName) ? "Estante de Depósito" : definition.DisplayName,
                     StorageLocationType.Indoor)))
@@ -1129,7 +1128,7 @@ namespace MaterialCityTycoon.Building
             RemoveFurnitureOccupancy(furniture);
             furnitureById.Remove(furniture.id);
             displaySlotAssignments.RemoveFurniture(furniture.id);
-            if (furniture.typeId == IndustrialStorageShelfTypeId)
+            if (furniture.typeId == FurnitureTypeIds.IndustrialStorageShelf)
             {
                 storageLocations.TryRemove(furniture.id);
             }

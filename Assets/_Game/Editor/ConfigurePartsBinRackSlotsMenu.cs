@@ -12,7 +12,7 @@ namespace MaterialCityTycoon.EditorTools
     {
         private const string PartsBinRackDefinitionPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_PartsBinRack.asset";
         private const string PartsBinRackPrefabPath = "Assets/_Game/Prefabs/Building/PF_PartsBinRack.prefab";
-        private const string PartsBinRackFurnitureTypeId = "prototype_parts_bin_rack";
+        private const string PartsBinRackFurnitureTypeId = FurnitureTypeIds.PartsBinRack;
         private const string PartsBinRackDefinitionName = "DEF_PartsBinRack";
         private const string BinBottomTransformName = "Bin_bottom";
         private const float RowGroupingTolerance = 0.01f;

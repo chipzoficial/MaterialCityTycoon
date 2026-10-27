@@ -11,7 +11,7 @@ namespace MaterialCityTycoon.EditorTools
     {
         private const string ToolDisplayDefinitionPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_ToolDisplay.asset";
         private const string ToolDisplayPrefabPath = "Assets/_Game/Prefabs/Building/PF_ToolDisplay.prefab";
-        private const string ToolDisplayFurnitureTypeId = "prototype_tool_display";
+        private const string ToolDisplayFurnitureTypeId = FurnitureTypeIds.ToolDisplay;
         private const string PanelTransformName = "Panel_01";
         private const string SlotId = "tool_panel_main";
         private const string SlotDisplayName = "Painel principal";

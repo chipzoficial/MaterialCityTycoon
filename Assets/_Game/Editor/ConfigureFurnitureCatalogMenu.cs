@@ -12,9 +12,9 @@ namespace MaterialCityTycoon.EditorTools
         private const string StoreScenePath = "Assets/_Game/Scenes/Store.unity";
         private const string DefinitionFolderPath = "Assets/_Game/ScriptableObjects/Furniture";
         private const string CommercialShelfDefinitionAssetPath = DefinitionFolderPath + "/DEF_CommercialShelf.asset";
-        private const string CommercialShelfFurnitureTypeId = "prototype_shelf";
+        private const string CommercialShelfFurnitureTypeId = FurnitureTypeIds.CommercialShelf;
         private const string ToolDisplayDefinitionAssetPath = DefinitionFolderPath + "/DEF_ToolDisplay.asset";
-        private const string ToolDisplayFurnitureTypeId = "prototype_tool_display";
+        private const string ToolDisplayFurnitureTypeId = FurnitureTypeIds.ToolDisplay;
         private const string ToolDisplayPanelName = "Panel_01";
         private const string ToolDisplayBaseName = "Base_01";
         private const float BoundsTolerance = 0.0001f;
@@ -42,7 +42,7 @@ namespace MaterialCityTycoon.EditorTools
             "Assets/_Game/Prefabs/Building/PF_PartsBinRack.prefab",
             DefinitionFolderPath + "/DEF_PartsBinRack.asset",
             "DEF_PartsBinRack",
-            "prototype_parts_bin_rack",
+            FurnitureTypeIds.PartsBinRack,
             "Organizador de ferragens",
             2,
             1);
@@ -51,7 +51,7 @@ namespace MaterialCityTycoon.EditorTools
             "Assets/_Game/Prefabs/Storage/PF_IndustrialStorageShelf.prefab",
             DefinitionFolderPath + "/DEF_IndustrialStorageShelf.asset",
             "DEF_IndustrialStorageShelf",
-            "industrial_storage_shelf",
+            FurnitureTypeIds.IndustrialStorageShelf,
             "Estante de Depósito",
             2,
             1,

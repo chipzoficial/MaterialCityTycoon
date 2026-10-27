@@ -20,7 +20,13 @@ namespace MaterialCityTycoon.Building
         private Material iconMaterial;
         private readonly List<FurnitureDefinition> definitions = new();
         private readonly FurnitureDefinition[] items = new FurnitureDefinition[4];
-        private static readonly string[] Ids = { "prototype_shelf", "prototype_tool_display", "prototype_parts_bin_rack", "industrial_storage_shelf" };
+        private static readonly string[] Ids =
+        {
+            FurnitureTypeIds.CommercialShelf,
+            FurnitureTypeIds.ToolDisplay,
+            FurnitureTypeIds.PartsBinRack,
+            FurnitureTypeIds.IndustrialStorageShelf
+        };
         private static readonly Color Normal = new(1f, 1f, 1f, 0.02f);
         private static readonly Color Selected = new(0.87f, 0.34f, 0.08f, 1f);
         private bool storageCategory;

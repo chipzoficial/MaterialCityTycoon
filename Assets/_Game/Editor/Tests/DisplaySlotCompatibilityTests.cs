@@ -329,7 +329,7 @@ namespace MaterialCityTycoon.EditorTests
         private static object CreateMoveState(string furnitureId)
         {
             System.Type type = typeof(FurniturePlacementController).GetNestedType("PlacedFurnitureState", Flags);
-            return System.Activator.CreateInstance(type, furnitureId, Vector2Int.zero, "prototype_shelf", 1, 2, 0);
+            return System.Activator.CreateInstance(type, furnitureId, Vector2Int.zero, FurnitureTypeIds.CommercialShelf, 1, 2, 0);
         }
     }
 
@@ -364,7 +364,7 @@ namespace MaterialCityTycoon.EditorTests
                 ((List<ProductDefinition>)typeof(FurniturePlacementController).GetField("productDefinitions", flags).GetValue(controller)).Add(product);
                 System.Collections.IDictionary states = (System.Collections.IDictionary)typeof(FurniturePlacementController).GetField("furnitureById", flags).GetValue(controller);
                 System.Type stateType = typeof(FurniturePlacementController).GetNestedType("PlacedFurnitureState", System.Reflection.BindingFlags.NonPublic);
-                states.Add("shelf_a", System.Activator.CreateInstance(stateType, "shelf_a", Vector2Int.zero, "prototype_shelf", 1, 2, 0));
+                states.Add("shelf_a", System.Activator.CreateInstance(stateType, "shelf_a", Vector2Int.zero, FurnitureTypeIds.CommercialShelf, 1, 2, 0));
 
                 Assert.That(controller.StoreInventory.TryAddUnits(product, 14), Is.True);
                 Assert.That(controller.TryAssignProductToDisplaySlot("shelf_a", "shelf_top", product), Is.True);
