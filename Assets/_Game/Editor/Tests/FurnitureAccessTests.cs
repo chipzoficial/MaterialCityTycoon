@@ -768,6 +768,21 @@ namespace MaterialCityTycoon.EditorTests
             finally { price.SetValue(product, oldPrice); }
         }
 
+        [Test]
+        public void WallsDoNotChangeFurnitureOccupancyOrAccessRules()
+        {
+            var grid = owner.GetComponent<ConstructionGrid>();
+            var walls = new WallEdges(grid);
+            Assert.That(Register(State("display-a", shelf, new Vector2Int(6, 2))), Is.True);
+            WallEdge edge = new(6, 2, true);
+            Assert.That(walls.TryAdd(edge), Is.True);
+            Assert.That(controller.TryGetFurnitureAtCell(new Vector2Int(6, 2), out string id, out _), Is.True);
+            Assert.That(id, Is.EqualTo("display-a"));
+            Assert.That(Available(tool, new Vector2Int(6, 2)), Is.False);
+            Assert.That(walls.Remove(edge), Is.True);
+            Assert.That(Available(tool, new Vector2Int(6, 2)), Is.False);
+        }
+
         private MaterialCityTycoon.Commerce.ProductDefinition PrepareRestocking()
         {
             var product = AssetDatabase.LoadAssetAtPath<MaterialCityTycoon.Commerce.ProductDefinition>("Assets/_Game/ScriptableObjects/Products/DEF_Argamassa.asset");

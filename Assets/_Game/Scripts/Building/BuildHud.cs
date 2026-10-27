@@ -13,6 +13,8 @@ namespace MaterialCityTycoon.Building
         [SerializeField] private Button closeButton;
         [SerializeField] private Button displayCategoryButton;
         [SerializeField] private Button storageCategoryButton;
+        [SerializeField] private Button structureCategoryButton;
+        [SerializeField] private Button wallButton;
         [SerializeField] private Button[] furnitureButtons;
         [SerializeField] private Shader iconShader;
         private Material iconMaterial;
@@ -22,9 +24,11 @@ namespace MaterialCityTycoon.Building
         private static readonly Color Normal = new(1f, 1f, 1f, 0.02f);
         private static readonly Color Selected = new(0.87f, 0.34f, 0.08f, 1f);
         private bool storageCategory;
+        private bool structureCategory;
         private bool previousActive;
         private FurnitureDefinition previousSelection;
         private bool previousMoving;
+        private bool previousWall;
 
         private void Awake()
         {
@@ -46,6 +50,8 @@ namespace MaterialCityTycoon.Building
             closeButton.onClick.AddListener(Close);
             displayCategoryButton.onClick.AddListener(() => SetCategory(false));
             storageCategoryButton.onClick.AddListener(() => SetCategory(true));
+            if (structureCategoryButton != null) structureCategoryButton.onClick.AddListener(() => { structureCategory = true; Refresh(); });
+            if (wallButton != null) wallButton.onClick.AddListener(() => { placement.SelectWallTool(); Refresh(); });
             for (int i = 0; i < furnitureButtons.Length; i++)
             {
                 int index = i;
@@ -58,10 +64,15 @@ namespace MaterialCityTycoon.Building
 
         private void Update()
         {
-            if (previousSelection != placement.SelectedFurnitureDefinition && placement.SelectedFurnitureDefinition != null)
+            if (previousWall && !placement.IsWallModeActive && placement.IsPlacementModeActive)
+            {
+                structureCategory = false;
+                storageCategory = placement.SelectedFurnitureDefinition != null && placement.SelectedFurnitureDefinition.FurnitureTypeId == Ids[3];
+            }
+            if (!placement.IsWallModeActive && previousSelection != placement.SelectedFurnitureDefinition && placement.SelectedFurnitureDefinition != null)
                 storageCategory = placement.SelectedFurnitureDefinition.FurnitureTypeId == Ids[3];
             if (previousActive != placement.IsPlacementModeActive || previousSelection != placement.SelectedFurnitureDefinition
-                || previousMoving != placement.IsMovingFurnitureActive) Refresh();
+                || previousMoving != placement.IsMovingFurnitureActive || previousWall != placement.IsWallModeActive) Refresh();
         }
 
         private void OnDestroy()
@@ -71,7 +82,7 @@ namespace MaterialCityTycoon.Building
 
         private void Toggle() { placement.SetPlacementMode(!placement.IsPlacementModeActive); Refresh(); }
         private void Close() { placement.SetPlacementMode(false); Refresh(); }
-        private void SetCategory(bool storage) { storageCategory = storage; Refresh(); }
+        private void SetCategory(bool storage) { structureCategory = false; storageCategory = storage; Refresh(); }
         private void Select(int index)
         {
             if (items[index] != null) placement.SelectFurnitureDefinition(items[index]);
@@ -83,16 +94,19 @@ namespace MaterialCityTycoon.Building
             previousActive = placement.IsPlacementModeActive;
             previousSelection = placement.SelectedFurnitureDefinition;
             previousMoving = placement.IsMovingFurnitureActive;
+            previousWall = placement.IsWallModeActive;
             catalog.SetActive(previousActive);
             buildButton.image.color = previousActive ? Selected : new Color(0.10f, 0.11f, 0.13f, 0.97f);
-            displayCategoryButton.image.color = storageCategory ? Normal : Selected;
-            storageCategoryButton.image.color = storageCategory ? Selected : Normal;
+            displayCategoryButton.image.color = !structureCategory && !storageCategory ? Selected : Normal;
+            storageCategoryButton.image.color = !structureCategory && storageCategory ? Selected : Normal;
+            if (structureCategoryButton != null) structureCategoryButton.image.color = structureCategory ? Selected : Normal;
+            if (wallButton != null) { wallButton.gameObject.SetActive(structureCategory); wallButton.image.color = previousWall ? Selected : Normal; }
             for (int i = 0; i < furnitureButtons.Length; i++)
             {
                 Button button = furnitureButtons[i];
-                button.gameObject.SetActive(storageCategory ? i == 3 : i < 3);
+                button.gameObject.SetActive(!structureCategory && (storageCategory ? i == 3 : i < 3));
                 button.interactable = items[i] != null && !previousMoving;
-                button.image.color = items[i] != null && items[i] == previousSelection ? Selected : Normal;
+                button.image.color = !previousWall && items[i] != null && items[i] == previousSelection ? Selected : Normal;
             }
         }
     }

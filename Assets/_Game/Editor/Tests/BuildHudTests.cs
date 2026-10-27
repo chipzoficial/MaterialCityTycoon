@@ -75,6 +75,28 @@ namespace MaterialCityTycoon.EditorTests
             Assert.That(furniture[0].gameObject.activeSelf, Is.False);
         }
 
+        [Test]
+        public void WallAndFurnitureToolsAreMutuallyExclusive()
+        {
+            WallConstructionController walls = owner.AddComponent<WallConstructionController>();
+            ConstructionGrid grid = owner.AddComponent<ConstructionGrid>();
+            Collider ground = owner.AddComponent<BoxCollider>();
+            UnityEngine.Camera camera = owner.AddComponent<UnityEngine.Camera>();
+            typeof(WallConstructionController).GetField("grid", Private).SetValue(walls, grid);
+            typeof(WallConstructionController).GetField("ground", Private).SetValue(walls, ground);
+            typeof(WallConstructionController).GetField("inputCamera", Private).SetValue(walls, camera);
+            typeof(FurniturePlacementController).GetField("walls", Private).SetValue(placement, walls);
+            Assert.That(placement.SelectWallTool(), Is.True);
+            Assert.That(placement.IsPlacementModeActive, Is.True);
+            Assert.That(placement.IsWallModeActive, Is.True);
+            Assert.That(placement.SelectFurnitureDefinition(definitions[0]), Is.True);
+            Assert.That(placement.IsWallModeActive, Is.False);
+            Assert.That(placement.SelectedFurnitureDefinition, Is.SameAs(definitions[0]));
+            var previewField = typeof(FurniturePlacementController).GetField("previewVisual", Private);
+            Object.DestroyImmediate((GameObject)previewField.GetValue(placement));
+            previewField.SetValue(placement, null);
+        }
+
         private Button MakeButton(string name)
         {
             GameObject obj = new(name, typeof(RectTransform), typeof(Image), typeof(Button)); obj.transform.SetParent(owner.transform);

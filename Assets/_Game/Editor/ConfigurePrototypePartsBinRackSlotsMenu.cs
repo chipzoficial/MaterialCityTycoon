@@ -16,6 +16,7 @@ namespace MaterialCityTycoon.EditorTools
         private const string PartsBinRackDefinitionName = "DEF_PrototypePartsBinRack";
         private const string BinBottomTransformName = "Bin_bottom";
         private const float RowGroupingTolerance = 0.01f;
+        private static readonly Regex NewBinMeshNamePattern = new(@"^Caixa_Organizadora_(\d{2})$", RegexOptions.CultureInvariant);
 
         private static readonly string[] RequiredBinChildNames =
         {
@@ -41,17 +42,18 @@ namespace MaterialCityTycoon.EditorTools
                 || !TryGetPartsBinRackPrefab(partsBinRackDefinition, out GameObject partsBinRackPrefab)
                 || !TryGetBinSlotConfigurations(partsBinRackPrefab, out List<BinSlotConfiguration> binSlotConfigurations, out int rowCount, out int columnCount)
                 || !TryGetDisplaySlotsProperty(partsBinRackDefinition, out SerializedObject serializedDefinition, out SerializedProperty displaySlotsProperty)
-                || !ValidateExistingSlotIds(displaySlotsProperty))
+                || !ValidateExistingSlotIds(displaySlotsProperty)
+                || !ValidateExpectedFiveByFiveLayout(binSlotConfigurations, rowCount, columnCount)
+                || !ValidateExistingManagedSlotIds(displaySlotsProperty, binSlotConfigurations))
             {
                 return;
             }
 
             Undo.RecordObject(partsBinRackDefinition, "Configure Parts Bin Rack Slots");
-            RemoveStaleManagedSlots(displaySlotsProperty, binSlotConfigurations);
-
             foreach (BinSlotConfiguration configuration in binSlotConfigurations)
             {
                 int slotIndex = FindSlotIndexById(displaySlotsProperty, configuration.slotId);
+                bool isNewSlot = slotIndex == -1;
                 if (slotIndex == -1)
                 {
                     slotIndex = displaySlotsProperty.arraySize;
@@ -64,12 +66,15 @@ namespace MaterialCityTycoon.EditorTools
                     return;
                 }
 
-                slotProperties.slotId.stringValue = configuration.slotId;
-                slotProperties.displayName.stringValue = configuration.displayName;
-                slotProperties.allowedDisplayModes.arraySize = 1;
-                slotProperties.allowedDisplayModes.GetArrayElementAtIndex(0).enumValueIndex = (int)ProductDisplayMode.Bin;
+                if (isNewSlot)
+                {
+                    slotProperties.slotId.stringValue = configuration.slotId;
+                    slotProperties.displayName.stringValue = configuration.displayName;
+                    slotProperties.allowedDisplayModes.arraySize = 1;
+                    slotProperties.allowedDisplayModes.GetArrayElementAtIndex(0).enumValueIndex = (int)ProductDisplayMode.Bin;
+                    slotProperties.capacityUnits.intValue = 0;
+                }
                 slotProperties.localDisplayPosition.vector3Value = configuration.localDisplayPosition;
-                slotProperties.capacityUnits.intValue = 0;
             }
 
             partsBinRackDefinition.name = PartsBinRackDefinitionName;
@@ -133,6 +138,12 @@ namespace MaterialCityTycoon.EditorTools
                 List<BinCandidate> bins = new();
                 foreach (Transform candidate in prefabContents.GetComponentsInChildren<Transform>(true))
                 {
+                    if (TryGetNewBinMeshCenter(prefabContents.transform, candidate, out Vector3 meshCenter))
+                    {
+                        bins.Add(new BinCandidate(meshCenter, candidate.name));
+                        continue;
+                    }
+
                     if (!TryGetCompleteBinBottom(candidate, out Transform binBottom))
                     {
                         continue;
@@ -146,7 +157,7 @@ namespace MaterialCityTycoon.EditorTools
                         return false;
                     }
 
-                    bins.Add(new BinCandidate(localDisplayPosition));
+                    bins.Add(new BinCandidate(localDisplayPosition, null));
                 }
 
                 return TryCreateSpatialConfigurations(bins, out configurations, out rowCount, out columnCount);
@@ -180,6 +191,16 @@ namespace MaterialCityTycoon.EditorTools
             }
 
             return binBottom != null;
+        }
+
+        private static bool TryGetNewBinMeshCenter(Transform root, Transform candidate, out Vector3 localDisplayPosition)
+        {
+            localDisplayPosition = default;
+            if (!NewBinMeshNamePattern.IsMatch(candidate.name) || candidate.GetComponent<MeshRenderer>() is not MeshRenderer renderer)
+                return false;
+            Matrix4x4 toRoot = root.worldToLocalMatrix * candidate.localToWorldMatrix;
+            localDisplayPosition = toRoot.MultiplyPoint3x4(renderer.localBounds.center);
+            return true;
         }
 
         private static bool TryGetDirectChild(Transform parent, string childName, out Transform child)
@@ -261,15 +282,44 @@ namespace MaterialCityTycoon.EditorTools
                 for (int columnIndex = 0; columnIndex < rows[rowIndex].Count; columnIndex++)
                 {
                     BinCandidate bin = rows[rowIndex][columnIndex];
-                    int rowNumber = rowIndex + 1;
-                    int columnNumber = columnIndex + 1;
+                    int expectedNumber = rowIndex * columnCount + columnIndex + 1;
+                    if (bin.modelName != null && bin.modelName != $"Caixa_Organizadora_{expectedNumber:D2}")
+                    {
+                        Debug.LogError("The new organizer drawer names do not match the required bottom-to-top, left-to-right order. No slots were configured.");
+                        configurations = null;
+                        return false;
+                    }
                     configurations.Add(new BinSlotConfiguration(
-                        $"bin_r{rowNumber:D2}_c{columnNumber:D2}",
-                        $"Fileira {rowNumber} — Caixa {columnNumber}",
+                        PartsBinRackSlotLayout.GetSlotId(rowIndex, columnIndex),
+                        PartsBinRackSlotLayout.GetDisplayName(rowIndex, columnIndex),
                         bin.localDisplayPosition));
                 }
             }
 
+            return true;
+        }
+
+        private static bool ValidateExpectedFiveByFiveLayout(List<BinSlotConfiguration> configurations, int rowCount, int columnCount)
+        {
+            if (rowCount == PartsBinRackSlotLayout.Rows && columnCount == PartsBinRackSlotLayout.Columns
+                && configurations.Count == PartsBinRackSlotLayout.Rows * PartsBinRackSlotLayout.Columns)
+                return true;
+            Debug.LogError($"The updated organizer must contain exactly {PartsBinRackSlotLayout.Rows} rows x {PartsBinRackSlotLayout.Columns} drawers. Detected {rowCount} x {columnCount}; no slots were changed.");
+            return false;
+        }
+
+        private static bool ValidateExistingManagedSlotIds(SerializedProperty slots, List<BinSlotConfiguration> configurations)
+        {
+            HashSet<string> expected = new(configurations.ConvertAll(configuration => configuration.slotId), StringComparer.Ordinal);
+            for (int index = 0; index < slots.arraySize; index++)
+            {
+                string id = slots.GetArrayElementAtIndex(index).FindPropertyRelative("slotId").stringValue;
+                if (IsManagedBinSlotId(id) && !expected.Contains(id))
+                {
+                    Debug.LogError($"Existing managed slot '{id}' is outside the 5 x 5 organizer layout. Resolve it before updating.");
+                    return false;
+                }
+            }
             return true;
         }
 
@@ -315,29 +365,6 @@ namespace MaterialCityTycoon.EditorTools
             return true;
         }
 
-        private static void RemoveStaleManagedSlots(
-            SerializedProperty displaySlotsProperty,
-            List<BinSlotConfiguration> configurations)
-        {
-            HashSet<string> configuredSlotIds = new(StringComparer.Ordinal);
-            foreach (BinSlotConfiguration configuration in configurations)
-            {
-                configuredSlotIds.Add(configuration.slotId);
-            }
-
-            for (int index = displaySlotsProperty.arraySize - 1; index >= 0; index--)
-            {
-                string slotId = displaySlotsProperty
-                    .GetArrayElementAtIndex(index)
-                    .FindPropertyRelative("slotId")
-                    .stringValue;
-                if (IsManagedBinSlotId(slotId) && !configuredSlotIds.Contains(slotId))
-                {
-                    displaySlotsProperty.DeleteArrayElementAtIndex(index);
-                }
-            }
-        }
-
         private static int FindSlotIndexById(SerializedProperty displaySlotsProperty, string slotId)
         {
             for (int index = 0; index < displaySlotsProperty.arraySize; index++)
@@ -377,10 +404,12 @@ namespace MaterialCityTycoon.EditorTools
         private readonly struct BinCandidate
         {
             public readonly Vector3 localDisplayPosition;
+            public readonly string modelName;
 
-            public BinCandidate(Vector3 localDisplayPosition)
+            public BinCandidate(Vector3 localDisplayPosition, string modelName)
             {
                 this.localDisplayPosition = localDisplayPosition;
+                this.modelName = modelName;
             }
 
             public static int CompareByHeightThenX(BinCandidate first, BinCandidate second)

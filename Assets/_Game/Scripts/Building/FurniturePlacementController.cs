@@ -19,6 +19,7 @@ namespace MaterialCityTycoon.Building
         [Header("References")]
         [SerializeField] private ConstructionGrid constructionGrid;
         [SerializeField] private GridCellPointer cellPointer;
+        [SerializeField] private WallConstructionController walls;
 
         [Header("Furniture Definitions")]
         [SerializeField] private List<FurnitureDefinition> furnitureDefinitions = new();
@@ -57,6 +58,7 @@ namespace MaterialCityTycoon.Building
         /// </summary>
         public bool IsPlacementModeActive => placementModeActive;
         public bool IsMovingFurnitureActive => IsMovingFurniture;
+        public bool IsWallModeActive => walls != null && walls.IsActive;
         public FurnitureDefinition SelectedFurnitureDefinition => selectedFurnitureDefinition;
 
         public void SetPlacementMode(bool active)
@@ -71,6 +73,19 @@ namespace MaterialCityTycoon.Building
             int index = furnitureDefinitions.IndexOf(definition);
             if (!TryGetValidFurnitureDefinitionAtIndex(index, out _)) return false;
             TrySelectFurnitureDefinition(index);
+            return true;
+        }
+
+        public bool SelectWallTool()
+        {
+            if (!enabled || walls == null || !walls.CanOperate) return false;
+            placementModeActive = true;
+            movingFurniture = null;
+            movingFurnitureRotationQuarterTurns = 0;
+            DestroyPreviewVisual();
+            DisposeCellPreview();
+            if (cellPointer != null) cellPointer.RestoreIndicatorMaterial();
+            walls.SetActive(true);
             return true;
         }
 
@@ -423,6 +438,12 @@ namespace MaterialCityTycoon.Building
                 return;
             }
 
+            if (IsWallModeActive)
+            {
+                if (keyboard != null) TrySelectFurnitureDefinitionFromKeyboard(keyboard);
+                if (IsWallModeActive) return;
+            }
+
             if (!IsMovingFurniture && keyboard != null && keyboard.mKey.wasPressedThisFrame)
             {
                 TryStartFurnitureMove();
@@ -461,7 +482,7 @@ namespace MaterialCityTycoon.Building
             }
         }
 
-        private static bool IsMouseOverUi(Mouse mouse)
+        internal static bool IsMouseOverUi(Mouse mouse)
         {
             if (EventSystem.current == null) return false;
             PointerEventData pointer = new(EventSystem.current) { position = mouse.position.ReadValue() };
@@ -494,6 +515,7 @@ namespace MaterialCityTycoon.Building
         private void ExitPlacementMode()
         {
             placementModeActive = false;
+            if (walls != null) walls.SetActive(false);
             CancelFurnitureMove();
             cellPointer.RestoreIndicatorMaterial();
 
@@ -813,6 +835,8 @@ namespace MaterialCityTycoon.Building
             {
                 return;
             }
+
+            if (walls != null) walls.SetActive(false);
 
             selectedFurnitureDefinition = definition;
             if (placementModeActive)
