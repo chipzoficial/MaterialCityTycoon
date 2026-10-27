@@ -7,11 +7,11 @@ using UnityEngine;
 
 namespace MaterialCityTycoon.EditorTools
 {
-    public static class ConfigurePrototypeShelfDisplaySlotsMenu
+    public static class ConfigureCommercialShelfDisplaySlotsMenu
     {
-        private const string PrototypeShelfDefinitionPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_CommercialShelf.asset";
-        private const string PrototypeShelfPrefabPath = "Assets/_Game/Prefabs/Building/PF_CommercialShelf.prefab";
-        private const string PrototypeShelfFurnitureTypeId = "prototype_shelf";
+        private const string CommercialShelfDefinitionPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_CommercialShelf.asset";
+        private const string CommercialShelfPrefabPath = "Assets/_Game/Prefabs/Building/PF_CommercialShelf.prefab";
+        private const string CommercialShelfFurnitureTypeId = "prototype_shelf";
 
         private static readonly SlotConfiguration[] ShelfSlots =
         {
@@ -79,7 +79,7 @@ namespace MaterialCityTycoon.EditorTools
             }
 
             GameObject product = PrefabUtility.LoadPrefabContents(productPath);
-            GameObject shelf = PrefabUtility.LoadPrefabContents(PrototypeShelfPrefabPath);
+            GameObject shelf = PrefabUtility.LoadPrefabContents(CommercialShelfPrefabPath);
             try
             {
                 foreach (MeshRenderer renderer in product.GetComponentsInChildren<MeshRenderer>(true))
@@ -128,8 +128,8 @@ namespace MaterialCityTycoon.EditorTools
             Debug.Log($"{label} {renderer.name}: min {result.min.ToString("F5")}, max {result.max.ToString("F5")}, size {result.size.ToString("F5")}");
         }
 
-        [MenuItem("Tools/Material City Tycoon/Configure Prototype Shelf Display Slots")]
-        public static void ConfigurePrototypeShelfDisplaySlots()
+        [MenuItem("Tools/Material City Tycoon/Configure Commercial Shelf Display Slots")]
+        public static void ConfigureCommercialShelfDisplaySlots()
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode)
             {
@@ -146,7 +146,7 @@ namespace MaterialCityTycoon.EditorTools
                 return;
             }
 
-            Undo.RecordObject(shelfDefinition, "Configure Prototype Shelf Display Slots");
+            Undo.RecordObject(shelfDefinition, "Configure Commercial Shelf Display Slots");
             displaySlotsProperty.arraySize = ShelfSlots.Length;
 
             for (int index = 0; index < ShelfSlots.Length; index++)
@@ -169,7 +169,7 @@ namespace MaterialCityTycoon.EditorTools
             serializedDefinition.ApplyModifiedProperties();
             EditorUtility.SetDirty(shelfDefinition);
             AssetDatabase.SaveAssetIfDirty(shelfDefinition);
-            Debug.Log("Prototype shelf display slots configured: shelf_bottom, shelf_middle and shelf_top.", shelfDefinition);
+            Debug.Log("Commercial shelf display slots configured: shelf_bottom, shelf_middle and shelf_top.", shelfDefinition);
         }
 
         private static bool ValidateSlotConfigurations()
@@ -187,7 +187,7 @@ namespace MaterialCityTycoon.EditorTools
 
                 if (!slotIds.Add(configuration.slotId))
                 {
-                    Debug.LogError($"Prototype shelf slot id '{configuration.slotId}' is duplicated.");
+                    Debug.LogError($"Commercial shelf slot id '{configuration.slotId}' is duplicated.");
                     return false;
                 }
             }
@@ -197,17 +197,17 @@ namespace MaterialCityTycoon.EditorTools
 
         private static bool TryGetShelfDefinition(out FurnitureDefinition shelfDefinition)
         {
-            shelfDefinition = AssetDatabase.LoadAssetAtPath<FurnitureDefinition>(PrototypeShelfDefinitionPath);
+            shelfDefinition = AssetDatabase.LoadAssetAtPath<FurnitureDefinition>(CommercialShelfDefinitionPath);
             if (shelfDefinition == null)
             {
-                Debug.LogError($"Prototype shelf definition was not found at '{PrototypeShelfDefinitionPath}'.");
+                Debug.LogError($"Commercial shelf definition was not found at '{CommercialShelfDefinitionPath}'.");
                 return false;
             }
 
-            if (shelfDefinition.FurnitureTypeId != PrototypeShelfFurnitureTypeId)
+            if (shelfDefinition.FurnitureTypeId != CommercialShelfFurnitureTypeId)
             {
                 Debug.LogError(
-                    $"Furniture definition at '{PrototypeShelfDefinitionPath}' must use Furniture Type Id '{PrototypeShelfFurnitureTypeId}'.",
+                    $"Furniture definition at '{CommercialShelfDefinitionPath}' must use Furniture Type Id '{CommercialShelfFurnitureTypeId}'.",
                     shelfDefinition);
                 return false;
             }
@@ -217,17 +217,17 @@ namespace MaterialCityTycoon.EditorTools
 
         private static bool TryGetShelfPrefab(FurnitureDefinition shelfDefinition, out GameObject shelfPrefab)
         {
-            shelfPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrototypeShelfPrefabPath);
+            shelfPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(CommercialShelfPrefabPath);
             if (shelfPrefab == null)
             {
-                Debug.LogError($"Prototype shelf prefab was not found at '{PrototypeShelfPrefabPath}'.", shelfDefinition);
+                Debug.LogError($"Commercial shelf prefab was not found at '{CommercialShelfPrefabPath}'.", shelfDefinition);
                 return false;
             }
 
             if (shelfDefinition.Prefab != shelfPrefab)
             {
                 Debug.LogError(
-                    "Prototype shelf definition references a different prefab. Configure the furniture definition before configuring its display slots.",
+                    "Commercial shelf definition references a different prefab. Configure the furniture definition before configuring its display slots.",
                     shelfDefinition);
                 return false;
             }
@@ -273,7 +273,7 @@ namespace MaterialCityTycoon.EditorTools
             }
 
             child = null;
-            Debug.LogError($"Prototype shelf prefab is missing the expected tray '{childName}'.", parent);
+            Debug.LogError($"Commercial shelf prefab is missing the expected tray '{childName}'.", parent);
             return false;
         }
 
@@ -283,7 +283,7 @@ namespace MaterialCityTycoon.EditorTools
             if (renderer == null)
             {
                 topCenter = default;
-                Debug.LogError($"Prototype shelf tray '{shelfTransform.name}' requires a MeshRenderer.", shelfTransform);
+                Debug.LogError($"Commercial shelf tray '{shelfTransform.name}' requires a MeshRenderer.", shelfTransform);
                 return false;
             }
 

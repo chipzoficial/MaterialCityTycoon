@@ -77,9 +77,9 @@ namespace MaterialCityTycoon.EditorTests
                 Is.EqualTo(25),
                 "The saved prefab must expose all twenty-five v2 drawers through its nested FBX hierarchy.");
 
-            bool wasConfigured = ConfigurePrototypePartsBinRackSlotsMenu.TryGetBinSlotConfigurations(
+            bool wasConfigured = ConfigurePartsBinRackSlotsMenu.TryGetBinSlotConfigurations(
                 prefab,
-                out List<ConfigurePrototypePartsBinRackSlotsMenu.BinSlotConfiguration> configurations,
+                out List<ConfigurePartsBinRackSlotsMenu.BinSlotConfiguration> configurations,
                 out int rowCount,
                 out int columnCount);
 

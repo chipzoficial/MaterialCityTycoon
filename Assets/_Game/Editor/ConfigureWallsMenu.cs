@@ -8,9 +8,9 @@ using UnityEngine.UI;
 
 namespace MaterialCityTycoon.EditorTools
 {
-    public static class ConfigurePrototypeWallsMenu
+    public static class ConfigureWallsMenu
     {
-        [MenuItem("Tools/Material City Tycoon/Configure Prototype Walls")]
+        [MenuItem("Tools/Material City Tycoon/Configure Walls")]
         public static void Configure()
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode) { Debug.LogError("Exit Play Mode before configuring walls."); return; }
@@ -75,7 +75,7 @@ namespace MaterialCityTycoon.EditorTools
             hud.FindProperty("wallButton").objectReferenceValue = wall;
             hud.ApplyModifiedProperties();
             EditorSceneManager.MarkSceneDirty(scene);
-            Debug.Log("Prototype walls configured. Save Store manually.", controller);
+            Debug.Log("Walls configured. Save Store manually.", controller);
         }
 
         private static Button CreateButton(string name, Transform parent, Font font, string label)

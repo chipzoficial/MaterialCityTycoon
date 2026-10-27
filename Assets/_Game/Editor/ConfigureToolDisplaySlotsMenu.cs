@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace MaterialCityTycoon.EditorTools
 {
-    public static class ConfigurePrototypeToolDisplaySlotsMenu
+    public static class ConfigureToolDisplaySlotsMenu
     {
         private const string ToolDisplayDefinitionPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_ToolDisplay.asset";
         private const string ToolDisplayPrefabPath = "Assets/_Game/Prefabs/Building/PF_ToolDisplay.prefab";

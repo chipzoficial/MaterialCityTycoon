@@ -9,11 +9,11 @@ using UnityEngine.SceneManagement;
 
 namespace MaterialCityTycoon.EditorTools
 {
-    public static class ConfigureInitialProductDefinitionsMenu
+    public static class ConfigureProductCatalogMenu
     {
         private const string ProductDefinitionsFolder = "Assets/_Game/ScriptableObjects/Products";
 
-        private static readonly ProductConfiguration[] InitialProducts =
+        private static readonly ProductConfiguration[] ProductDefinitions =
         {
             new(
                 "DEF_Argamassa",
@@ -38,8 +38,8 @@ namespace MaterialCityTycoon.EditorTools
                 ProductDisplayMode.Bin)
         };
 
-        [MenuItem("Tools/Material City Tycoon/Configure Initial Product Definitions")]
-        public static void ConfigureInitialProductDefinitions()
+        [MenuItem("Tools/Material City Tycoon/Configure Product Definitions")]
+        public static void ConfigureProductDefinitions()
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode)
             {
@@ -54,21 +54,21 @@ namespace MaterialCityTycoon.EditorTools
 
             EnsureAssetFolder(ProductDefinitionsFolder);
 
-            foreach (ProductConfiguration configuration in InitialProducts)
+            foreach (ProductConfiguration configuration in ProductDefinitions)
             {
                 ConfigureProductDefinition(configuration);
             }
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            Debug.Log("Initial product definitions configured: Argamassa, Martelo and Parafusos.");
+            Debug.Log("Product definitions configured: Argamassa, Martelo and Parafusos.");
         }
 
         private static bool ValidateConfigurations()
         {
             HashSet<string> productIds = new(StringComparer.Ordinal);
 
-            foreach (ProductConfiguration configuration in InitialProducts)
+            foreach (ProductConfiguration configuration in ProductDefinitions)
             {
                 if (string.IsNullOrWhiteSpace(configuration.ProductId)
                     || string.IsNullOrWhiteSpace(configuration.AssetName)
@@ -99,7 +99,7 @@ namespace MaterialCityTycoon.EditorTools
 
         private static bool ValidateExistingAssets()
         {
-            foreach (ProductConfiguration configuration in InitialProducts)
+            foreach (ProductConfiguration configuration in ProductDefinitions)
             {
                 string targetPath = GetAssetPath(configuration);
                 UnityEngine.Object mainAsset = AssetDatabase.LoadMainAssetAtPath(targetPath);
@@ -121,7 +121,7 @@ namespace MaterialCityTycoon.EditorTools
                     continue;
                 }
 
-                foreach (ProductConfiguration configuration in InitialProducts)
+                foreach (ProductConfiguration configuration in ProductDefinitions)
                 {
                     if (definition.ProductId != configuration.ProductId || assetPath == GetAssetPath(configuration))
                     {

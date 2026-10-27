@@ -7,38 +7,38 @@ using UnityEngine.SceneManagement;
 
 namespace MaterialCityTycoon.EditorTools
 {
-    public static class ConfigurePrototypeShelfMenu
+    public static class ConfigureFurnitureCatalogMenu
     {
         private const string StoreScenePath = "Assets/_Game/Scenes/Store.unity";
         private const string DefinitionFolderPath = "Assets/_Game/ScriptableObjects/Furniture";
-        private const string PrototypeShelfDefinitionAssetPath = DefinitionFolderPath + "/DEF_CommercialShelf.asset";
-        private const string PrototypeShelfFurnitureTypeId = "prototype_shelf";
-        private const string PrototypeToolDisplayDefinitionAssetPath = DefinitionFolderPath + "/DEF_ToolDisplay.asset";
-        private const string PrototypeToolDisplayFurnitureTypeId = "prototype_tool_display";
+        private const string CommercialShelfDefinitionAssetPath = DefinitionFolderPath + "/DEF_CommercialShelf.asset";
+        private const string CommercialShelfFurnitureTypeId = "prototype_shelf";
+        private const string ToolDisplayDefinitionAssetPath = DefinitionFolderPath + "/DEF_ToolDisplay.asset";
+        private const string ToolDisplayFurnitureTypeId = "prototype_tool_display";
         private const string ToolDisplayPanelName = "Panel_01";
         private const string ToolDisplayBaseName = "Base_01";
         private const float BoundsTolerance = 0.0001f;
         private const float FootprintTolerance = 0.001f;
 
-        private static readonly FurnitureConfiguration PrototypeShelf = new(
+        private static readonly FurnitureConfiguration CommercialShelf = new(
             "Assets/_Game/Prefabs/Building/PF_CommercialShelf.prefab",
-            PrototypeShelfDefinitionAssetPath,
+            CommercialShelfDefinitionAssetPath,
             "DEF_CommercialShelf",
-            PrototypeShelfFurnitureTypeId,
+            CommercialShelfFurnitureTypeId,
             "Prateleira",
             1,
             2);
 
-        private static readonly FurnitureConfiguration PrototypeToolDisplay = new(
+        private static readonly FurnitureConfiguration ToolDisplay = new(
             "Assets/_Game/Prefabs/Building/PF_ToolDisplay.prefab",
-            PrototypeToolDisplayDefinitionAssetPath,
+            ToolDisplayDefinitionAssetPath,
             "DEF_ToolDisplay",
-            PrototypeToolDisplayFurnitureTypeId,
+            ToolDisplayFurnitureTypeId,
             "Expositor de ferramentas",
             1,
             1);
 
-        private static readonly FurnitureConfiguration PrototypePartsBinRack = new(
+        private static readonly FurnitureConfiguration PartsBinRack = new(
             "Assets/_Game/Prefabs/Building/PF_PartsBinRack.prefab",
             DefinitionFolderPath + "/DEF_PartsBinRack.asset",
             "DEF_PartsBinRack",
@@ -58,10 +58,10 @@ namespace MaterialCityTycoon.EditorTools
             new[] { new Vector2Int(0, 1), new Vector2Int(1, 1),
                 new Vector2Int(0, -1), new Vector2Int(1, -1) });
 
-        [MenuItem("Tools/Material City Tycoon/Configure Prototype Shelf")]
-        private static void ConfigurePrototypeShelf()
+        [MenuItem("Tools/Material City Tycoon/Configure Commercial Shelf")]
+        private static void ConfigureCommercialShelf()
         {
-            ConfigureFurnitureDefinition(PrototypeShelf);
+            ConfigureFurnitureDefinition(CommercialShelf);
         }
 
         [MenuItem("Tools/Material City Tycoon/Configure Tool Display")]
@@ -69,14 +69,14 @@ namespace MaterialCityTycoon.EditorTools
         {
             if (!CanConfigureInEditor()
                 || !TryGetConfiguredDefinition(
-                    PrototypeShelfDefinitionAssetPath,
-                    PrototypeShelfFurnitureTypeId,
+                    CommercialShelfDefinitionAssetPath,
+                    CommercialShelfFurnitureTypeId,
                     out FurnitureDefinition shelfDefinition))
             {
                 return;
             }
 
-            ConfigureFurnitureDefinition(PrototypeToolDisplay, shelfDefinition);
+            ConfigureFurnitureDefinition(ToolDisplay, shelfDefinition);
         }
 
         [MenuItem("Tools/Material City Tycoon/Configure Parts Bin Rack")]
@@ -84,19 +84,19 @@ namespace MaterialCityTycoon.EditorTools
         {
             if (!CanConfigureInEditor()
                 || !TryGetConfiguredDefinition(
-                    PrototypeShelfDefinitionAssetPath,
-                    PrototypeShelfFurnitureTypeId,
+                    CommercialShelfDefinitionAssetPath,
+                    CommercialShelfFurnitureTypeId,
                     out FurnitureDefinition shelfDefinition)
                 || !TryGetConfiguredDefinition(
-                    PrototypeToolDisplayDefinitionAssetPath,
-                    PrototypeToolDisplayFurnitureTypeId,
+                    ToolDisplayDefinitionAssetPath,
+                    ToolDisplayFurnitureTypeId,
                     out FurnitureDefinition toolDisplayDefinition))
             {
                 return;
             }
 
             ConfigureFurnitureDefinition(
-                PrototypePartsBinRack,
+                PartsBinRack,
                 shelfDefinition,
                 toolDisplayDefinition);
         }
@@ -159,7 +159,7 @@ namespace MaterialCityTycoon.EditorTools
         private static void CenterPartsBinRackOnGrid()
         {
             if (!CanConfigureInEditor()
-                || !TryGetFurniturePrefab(PrototypePartsBinRack, out GameObject prefab))
+                || !TryGetFurniturePrefab(PartsBinRack, out GameObject prefab))
             {
                 return;
             }
@@ -214,7 +214,7 @@ namespace MaterialCityTycoon.EditorTools
         private static void CenterToolDisplayOnGrid()
         {
             if (!CanConfigureInEditor()
-                || !TryGetFurniturePrefab(PrototypeToolDisplay, out GameObject prefab))
+                || !TryGetFurniturePrefab(ToolDisplay, out GameObject prefab))
             {
                 return;
             }
@@ -475,15 +475,15 @@ namespace MaterialCityTycoon.EditorTools
                     Mathf.Abs(root.lossyScale.x),
                     Mathf.Abs(root.lossyScale.y),
                     Mathf.Abs(root.lossyScale.z)));
-            bool isCompatible = effectiveSize.x <= PrototypePartsBinRack.width + FootprintTolerance
-                && effectiveSize.z <= PrototypePartsBinRack.depth + FootprintTolerance;
+            bool isCompatible = effectiveSize.x <= PartsBinRack.width + FootprintTolerance
+                && effectiveSize.z <= PartsBinRack.depth + FootprintTolerance;
             string compatibility = isCompatible ? "compatible" : "not compatible";
 
             Debug.Log(
                 $"Parts bin rack bounds before: center {boundsBefore.center}, min {boundsBefore.min}, size {boundsBefore.size}. "
                 + $"Bounds after: center {boundsAfter.center}, min {boundsAfter.min}, size {boundsAfter.size}. "
                 + $"Effective width X: {effectiveSize.x:F3} m; effective depth Z: {effectiveSize.z:F3} m; "
-                + $"footprint {PrototypePartsBinRack.width}x{PrototypePartsBinRack.depth}: {compatibility}.",
+                + $"footprint {PartsBinRack.width}x{PartsBinRack.depth}: {compatibility}.",
                 prefab);
 
             if (!isCompatible)

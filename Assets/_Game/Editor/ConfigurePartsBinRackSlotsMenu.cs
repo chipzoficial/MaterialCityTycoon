@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace MaterialCityTycoon.EditorTools
 {
-    public static class ConfigurePrototypePartsBinRackSlotsMenu
+    public static class ConfigurePartsBinRackSlotsMenu
     {
         private const string PartsBinRackDefinitionPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_PartsBinRack.asset";
         private const string PartsBinRackPrefabPath = "Assets/_Game/Prefabs/Building/PF_PartsBinRack.prefab";
