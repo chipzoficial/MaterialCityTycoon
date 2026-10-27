@@ -10,7 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 8604187036496752417}
   m_Layer: 0
-  m_Name: FB_PrototypeToolDisplay
+  m_Name: PF_ToolDisplay
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

@@ -10,19 +10,17 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: eff17c26142135b4e952757f996f8e63, type: 3}
-  m_Name: DEF_PrototypeToolDisplay
+  m_Name: DEF_IndustrialStorageShelf
   m_EditorClassIdentifier: Assembly-CSharp::MaterialCityTycoon.Building.FurnitureDefinition
-  furnitureTypeId: prototype_tool_display
-  displayName: Expositor de ferramentas
-  prefab: {fileID: 4947576922067255395, guid: 80ba2531d39f52142a2760387ecfa5e5, type: 3}
-  width: 1
+  furnitureTypeId: industrial_storage_shelf
+  displayName: "Estante de Dep\xF3sito"
+  prefab: {fileID: 7005320619028828897, guid: 44f5f38351efc6644b0eddb0aaf7caa2, type: 3}
+  width: 2
   depth: 1
-  displaySlots:
-  - slotId: tool_panel_main
-    displayName: Painel principal
-    allowedDisplayModes: 01000000i
-    localDisplayPosition: {x: 0, y: 0.85, z: 0.03}
-    capacityUnits: 0
+  displaySlots: []
   accessCellOffsets:
-  - {x: 0, y: -1}
   - {x: 0, y: 1}
+  - {x: 1, y: 1}
+  - {x: 0, y: -1}
+  - {x: 1, y: -1}
+  storageCapacity: {fileID: 11400000, guid: 3e52d1670b5b58d4d84d7ad1caf9b9d5, type: 2}

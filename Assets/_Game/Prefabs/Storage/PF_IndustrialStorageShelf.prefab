@@ -10,7 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 6500509235989694980}
   m_Layer: 0
-  m_Name: PF_EstanteDeposito
+  m_Name: PF_IndustrialStorageShelf
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

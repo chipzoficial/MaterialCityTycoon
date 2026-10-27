@@ -1438,7 +1438,7 @@ GameObject:
   m_Component:
   - component: {fileID: 3590733366942087100}
   m_Layer: 0
-  m_Name: PB_PrototypeShelf
+  m_Name: PF_CommercialShelf
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

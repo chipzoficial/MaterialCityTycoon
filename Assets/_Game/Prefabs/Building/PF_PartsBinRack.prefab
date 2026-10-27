@@ -330,7 +330,7 @@ GameObject:
   m_Component:
   - component: {fileID: 8358194560781479315}
   m_Layer: 0
-  m_Name: DEF_PrototypePartsBinRack
+  m_Name: PF_PartsBinRack
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

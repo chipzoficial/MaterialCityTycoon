@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 80e477f056750664ba7e7b9a0896ff2a, type: 3}
-  m_Name: DEF_EstanteDeposito_StorageCapacity
+  m_Name: DEF_IndustrialStorageShelfCapacity
   m_EditorClassIdentifier: Assembly-CSharp::MaterialCityTycoon.Building.StorageCapacityDefinition
   product: {fileID: 11400000, guid: f718da9ea58d7d940b7b45a575938ea4, type: 2}
   orientedProductSize: {x: 0.6000001, y: 0.120000094, z: 0.4}
