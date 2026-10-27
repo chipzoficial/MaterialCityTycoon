@@ -9,11 +9,11 @@ namespace MaterialCityTycoon.EditorTools
 {
     public static class ConfigurePrototypeShelfMenu
     {
-        private const string StorePrototypeScenePath = "Assets/_Game/Scenes/StorePrototype.unity";
+        private const string StoreScenePath = "Assets/_Game/Scenes/Store.unity";
         private const string DefinitionFolderPath = "Assets/_Game/ScriptableObjects/Furniture";
-        private const string PrototypeShelfDefinitionAssetPath = DefinitionFolderPath + "/DEF_PrototypeShelf.asset";
+        private const string PrototypeShelfDefinitionAssetPath = DefinitionFolderPath + "/DEF_CommercialShelf.asset";
         private const string PrototypeShelfFurnitureTypeId = "prototype_shelf";
-        private const string PrototypeToolDisplayDefinitionAssetPath = DefinitionFolderPath + "/DEF_PrototypeToolDisplay.asset";
+        private const string PrototypeToolDisplayDefinitionAssetPath = DefinitionFolderPath + "/DEF_ToolDisplay.asset";
         private const string PrototypeToolDisplayFurnitureTypeId = "prototype_tool_display";
         private const string ToolDisplayPanelName = "Panel_01";
         private const string ToolDisplayBaseName = "Base_01";
@@ -21,36 +21,36 @@ namespace MaterialCityTycoon.EditorTools
         private const float FootprintTolerance = 0.001f;
 
         private static readonly FurnitureConfiguration PrototypeShelf = new(
-            "Assets/_Game/Prefabs/Building/PB_PrototypeShelf.prefab",
+            "Assets/_Game/Prefabs/Building/PF_CommercialShelf.prefab",
             PrototypeShelfDefinitionAssetPath,
-            "DEF_PrototypeShelf",
+            "DEF_CommercialShelf",
             PrototypeShelfFurnitureTypeId,
             "Prateleira",
             1,
             2);
 
         private static readonly FurnitureConfiguration PrototypeToolDisplay = new(
-            "Assets/_Game/Prefabs/Building/FB_PrototypeToolDisplay.prefab",
+            "Assets/_Game/Prefabs/Building/PF_ToolDisplay.prefab",
             PrototypeToolDisplayDefinitionAssetPath,
-            "DEF_PrototypeToolDisplay",
+            "DEF_ToolDisplay",
             PrototypeToolDisplayFurnitureTypeId,
             "Expositor de ferramentas",
             1,
             1);
 
         private static readonly FurnitureConfiguration PrototypePartsBinRack = new(
-            "Assets/_Game/Prefabs/Building/DEF_PrototypePartsBinRack.prefab",
-            DefinitionFolderPath + "/DEF_PrototypePartsBinRack.asset",
-            "DEF_PrototypePartsBinRack",
+            "Assets/_Game/Prefabs/Building/PF_PartsBinRack.prefab",
+            DefinitionFolderPath + "/DEF_PartsBinRack.asset",
+            "DEF_PartsBinRack",
             "prototype_parts_bin_rack",
             "Organizador de ferragens",
             2,
             1);
 
         private static readonly FurnitureConfiguration IndustrialStorageShelf = new(
-            "Assets/_Game/Art/Models/Storage/PF_EstanteDeposito.prefab",
-            DefinitionFolderPath + "/DEF_EstanteDeposito.asset",
-            "DEF_EstanteDeposito",
+            "Assets/_Game/Prefabs/Storage/PF_IndustrialStorageShelf.prefab",
+            DefinitionFolderPath + "/DEF_IndustrialStorageShelf.asset",
+            "DEF_IndustrialStorageShelf",
             "industrial_storage_shelf",
             "Estante de Depósito",
             2,
@@ -257,9 +257,9 @@ namespace MaterialCityTycoon.EditorTools
                 return;
             }
 
-            if (!TryGetStorePrototypeScene(out Scene storePrototypeScene)
+            if (!TryGetStoreScene(out Scene storeScene)
                 || !TryGetFurniturePrefab(configuration, out GameObject prefab)
-                || !TryGetPlacementController(storePrototypeScene, out FurniturePlacementController controller)
+                || !TryGetPlacementController(storeScene, out FurniturePlacementController controller)
                 || !TryGetControllerDefinitions(controller, out SerializedObject controllerSerialized, out SerializedProperty definitionsProperty))
             {
                 return;
@@ -357,12 +357,12 @@ namespace MaterialCityTycoon.EditorTools
             {
                 controllerSerialized.ApplyModifiedProperties();
                 EditorUtility.SetDirty(controller);
-                EditorSceneManager.MarkSceneDirty(storePrototypeScene);
+                EditorSceneManager.MarkSceneDirty(storeScene);
             }
 
             AssetDatabase.SaveAssetIfDirty(definition);
             Debug.Log(
-                $"{configuration.displayName} definition configured. StorePrototype was marked dirty when its Furniture Definitions list changed; save the scene manually when ready.",
+                $"{configuration.displayName} definition configured. Store was marked dirty when its Furniture Definitions list changed; save the scene manually when ready.",
                 definition);
         }
 
@@ -494,15 +494,15 @@ namespace MaterialCityTycoon.EditorTools
             }
         }
 
-        private static bool TryGetStorePrototypeScene(out Scene scene)
+        private static bool TryGetStoreScene(out Scene scene)
         {
-            scene = SceneManager.GetSceneByPath(StorePrototypeScenePath);
+            scene = SceneManager.GetSceneByPath(StoreScenePath);
             if (scene.IsValid() && scene.isLoaded)
             {
                 return true;
             }
 
-            Debug.LogError($"Open '{StorePrototypeScenePath}' before running this command.");
+            Debug.LogError($"Open '{StoreScenePath}' before running this command.");
             return false;
         }
 

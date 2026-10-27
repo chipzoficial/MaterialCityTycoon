@@ -9,8 +9,8 @@ namespace MaterialCityTycoon.EditorTools
 {
     public static class ConfigurePrototypeShelfDisplaySlotsMenu
     {
-        private const string PrototypeShelfDefinitionPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_PrototypeShelf.asset";
-        private const string PrototypeShelfPrefabPath = "Assets/_Game/Prefabs/Building/PB_PrototypeShelf.prefab";
+        private const string PrototypeShelfDefinitionPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_CommercialShelf.asset";
+        private const string PrototypeShelfPrefabPath = "Assets/_Game/Prefabs/Building/PF_CommercialShelf.prefab";
         private const string PrototypeShelfFurnitureTypeId = "prototype_shelf";
 
         private static readonly SlotConfiguration[] ShelfSlots =

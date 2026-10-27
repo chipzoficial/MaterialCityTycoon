@@ -17,9 +17,9 @@ namespace MaterialCityTycoon.EditorTools
                 return;
             }
 
-            FurnitureDefinition shelf = Load("DEF_PrototypeShelf.asset", "prototype_shelf", 1, 2);
-            FurnitureDefinition tool = Load("DEF_PrototypeToolDisplay.asset", "prototype_tool_display", 1, 1);
-            FurnitureDefinition rack = Load("DEF_PrototypePartsBinRack.asset", "prototype_parts_bin_rack", 2, 1);
+            FurnitureDefinition shelf = Load("DEF_CommercialShelf.asset", "prototype_shelf", 1, 2);
+            FurnitureDefinition tool = Load("DEF_ToolDisplay.asset", "prototype_tool_display", 1, 1);
+            FurnitureDefinition rack = Load("DEF_PartsBinRack.asset", "prototype_parts_bin_rack", 2, 1);
             if (shelf == null || tool == null || rack == null)
             {
                 return;

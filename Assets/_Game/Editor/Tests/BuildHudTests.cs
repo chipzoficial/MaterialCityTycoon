@@ -26,7 +26,7 @@ namespace MaterialCityTycoon.EditorTests
             owner = new GameObject("hud test"); owner.SetActive(false);
             placement = owner.AddComponent<FurniturePlacementController>();
             var configured = (List<FurnitureDefinition>)typeof(FurniturePlacementController).GetField("furnitureDefinitions", Private).GetValue(placement);
-            string[] names = { "DEF_PrototypeShelf", "DEF_PrototypeToolDisplay", "DEF_PrototypePartsBinRack", "DEF_EstanteDeposito" };
+            string[] names = { "DEF_CommercialShelf", "DEF_ToolDisplay", "DEF_PartsBinRack", "DEF_IndustrialStorageShelf" };
             foreach (string name in names)
             {
                 FurnitureDefinition definition = AssetDatabase.LoadAssetAtPath<FurnitureDefinition>($"Assets/_Game/ScriptableObjects/Furniture/{name}.asset");

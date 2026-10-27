@@ -11,7 +11,7 @@ namespace MaterialCityTycoon.EditorTools
 {
     public static class ConfigureFurnitureInspectionPanelMenu
     {
-        private const string StorePrototypeScenePath = "Assets/_Game/Scenes/StorePrototype.unity";
+        private const string StoreScenePath = "Assets/_Game/Scenes/Store.unity";
         private const string UserInterfaceRootName = "FurnitureInspectionUI";
         private const string PanelName = "FurnitureInspectionPanel";
         private const string SlotsContentName = "SlotsContent";
@@ -25,7 +25,7 @@ namespace MaterialCityTycoon.EditorTools
                 return;
             }
 
-            if (!TryGetStorePrototypeScene(out Scene scene)
+            if (!TryGetStoreScene(out Scene scene)
                 || !TryGetSingleComponent(scene, out FurniturePlacementController placementController)
                 || !TryGetSingleComponent(scene, out GridCellPointer cellPointer)
                 || !TryGetCompatibleEventSystem(scene, out EventSystem eventSystem)
@@ -47,19 +47,19 @@ namespace MaterialCityTycoon.EditorTools
             EditorUtility.SetDirty(inspectionController);
             EditorSceneManager.MarkSceneDirty(scene);
             Debug.Log(
-                "Furniture inspection panel configured with independent scrollable slot rows. StorePrototype was marked dirty; save the scene manually when ready.",
+                "Furniture inspection panel configured with independent scrollable slot rows. Store was marked dirty; save the scene manually when ready.",
                 panel);
         }
 
-        private static bool TryGetStorePrototypeScene(out Scene scene)
+        private static bool TryGetStoreScene(out Scene scene)
         {
-            scene = SceneManager.GetSceneByPath(StorePrototypeScenePath);
+            scene = SceneManager.GetSceneByPath(StoreScenePath);
             if (scene.IsValid() && scene.isLoaded)
             {
                 return true;
             }
 
-            Debug.LogError($"Open '{StorePrototypeScenePath}' before running this command.");
+            Debug.LogError($"Open '{StoreScenePath}' before running this command.");
             return false;
         }
 

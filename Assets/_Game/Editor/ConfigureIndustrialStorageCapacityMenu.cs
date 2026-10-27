@@ -9,8 +9,8 @@ namespace MaterialCityTycoon.EditorTools
 {
     public static class ConfigureIndustrialStorageCapacityMenu
     {
-        private const string FurniturePath = "Assets/_Game/ScriptableObjects/Furniture/DEF_EstanteDeposito.asset";
-        private const string CapacityPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_EstanteDeposito_StorageCapacity.asset";
+        private const string FurniturePath = "Assets/_Game/ScriptableObjects/Furniture/DEF_IndustrialStorageShelf.asset";
+        private const string CapacityPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_IndustrialStorageShelfCapacity.asset";
         private const string ProductPath = "Assets/_Game/ScriptableObjects/Products/DEF_Argamassa.asset";
         private const float Margin = 0.01f;
         private const float Tolerance = 0.0001f;
@@ -48,7 +48,7 @@ namespace MaterialCityTycoon.EditorTools
             if (capacity == null)
             {
                 capacity = ScriptableObject.CreateInstance<StorageCapacityDefinition>();
-                capacity.name = "DEF_EstanteDeposito_StorageCapacity";
+                capacity.name = "DEF_IndustrialStorageShelfCapacity";
                 AssetDatabase.CreateAsset(capacity, CapacityPath);
                 Undo.RegisterCreatedObjectUndo(capacity, "Create Industrial Shelf Capacity");
             }

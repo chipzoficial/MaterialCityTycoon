@@ -85,7 +85,7 @@ namespace MaterialCityTycoon.EditorTests
         [Test]
         public void ConfiguredIndustrialShelfExposesMeasuredCapacity()
         {
-            FurnitureDefinition shelf = AssetDatabase.LoadAssetAtPath<FurnitureDefinition>("Assets/_Game/ScriptableObjects/Furniture/DEF_EstanteDeposito.asset");
+            FurnitureDefinition shelf = AssetDatabase.LoadAssetAtPath<FurnitureDefinition>("Assets/_Game/ScriptableObjects/Furniture/DEF_IndustrialStorageShelf.asset");
             Assert.That(shelf, Is.Not.Null);
             Assert.That(shelf.StorageCapacity, Is.Not.Null);
             Assert.That(shelf.StorageCapacity.IsValid(), Is.True);

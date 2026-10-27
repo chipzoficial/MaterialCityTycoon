@@ -12,9 +12,9 @@ namespace MaterialCityTycoon.EditorTests
         private const string MortarDefinitionPath = "Assets/_Game/ScriptableObjects/Products/DEF_Argamassa.asset";
         private const string HammerDefinitionPath = "Assets/_Game/ScriptableObjects/Products/DEF_Martelo.asset";
         private const string ScrewsDefinitionPath = "Assets/_Game/ScriptableObjects/Products/DEF_Parafusos.asset";
-        private const string ShelfDefinitionPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_PrototypeShelf.asset";
-        private const string ToolDisplayDefinitionPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_PrototypeToolDisplay.asset";
-        private const string PartsBinRackDefinitionPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_PrototypePartsBinRack.asset";
+        private const string ShelfDefinitionPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_CommercialShelf.asset";
+        private const string ToolDisplayDefinitionPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_ToolDisplay.asset";
+        private const string PartsBinRackDefinitionPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_PartsBinRack.asset";
 
         private readonly List<ScriptableObject> temporaryDefinitions = new();
 
@@ -339,7 +339,7 @@ namespace MaterialCityTycoon.EditorTests
         public void PlacementControllerUsesConfiguredShelfCapacityForMortar()
         {
             FurnitureDefinition originalFurniture = AssetDatabase.LoadAssetAtPath<FurnitureDefinition>(
-                "Assets/_Game/ScriptableObjects/Furniture/DEF_PrototypeShelf.asset");
+                "Assets/_Game/ScriptableObjects/Furniture/DEF_CommercialShelf.asset");
             ProductDefinition originalProduct = AssetDatabase.LoadAssetAtPath<ProductDefinition>(
                 "Assets/_Game/ScriptableObjects/Products/DEF_Argamassa.asset");
             Assert.That(originalFurniture, Is.Not.Null);

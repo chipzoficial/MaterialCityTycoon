@@ -12,7 +12,7 @@ namespace MaterialCityTycoon.EditorTools
 {
     public static class ConfigureBuildHudMenu
     {
-        private const string ScenePath = "Assets/_Game/Scenes/StorePrototype.unity";
+        private const string ScenePath = "Assets/_Game/Scenes/Store.unity";
         private static readonly Color Surface = new(0.10f, 0.11f, 0.13f, 0.97f);
 
         [MenuItem("Tools/Material City Tycoon/Configure Build HUD")]
@@ -20,7 +20,7 @@ namespace MaterialCityTycoon.EditorTools
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode) { Debug.LogError("Exit Play Mode before configuring the build HUD."); return; }
             Scene scene = SceneManager.GetSceneByPath(ScenePath);
-            if (!scene.IsValid() || !scene.isLoaded) { Debug.LogError("Open StorePrototype before configuring the build HUD."); return; }
+            if (!scene.IsValid() || !scene.isLoaded) { Debug.LogError("Open Store before configuring the build HUD."); return; }
             var controllers = Resources.FindObjectsOfTypeAll<FurniturePlacementController>().Where(c => c.gameObject.scene == scene).ToArray();
             var huds = Resources.FindObjectsOfTypeAll<BuildHud>().Where(c => c.gameObject.scene == scene).ToArray();
             var systems = Resources.FindObjectsOfTypeAll<EventSystem>().Where(c => c.gameObject.scene.IsValid() && c.gameObject.scene.isLoaded).ToArray();
@@ -95,7 +95,7 @@ namespace MaterialCityTycoon.EditorTools
             data.ApplyModifiedPropertiesWithoutUndo();
             panel.SetActive(false);
             EditorSceneManager.MarkSceneDirty(scene);
-            Debug.Log("Build HUD configured. Save StorePrototype manually.", hud);
+            Debug.Log("Build HUD configured. Save Store manually.", hud);
         }
 
         private static void EnsureEventSystem(EventSystem[] systems, Scene scene)

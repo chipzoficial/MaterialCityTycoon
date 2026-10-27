@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using MaterialCityTycoon.Building;
 using MaterialCityTycoon.Commerce;
+using MaterialCityTycoon.EditorTools;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -64,10 +65,38 @@ namespace MaterialCityTycoon.EditorTests
         }
 
         [Test]
+        public void NestedOrganizerPrefabConfiguresTheTwentyFiveNamedDrawersWithoutLegacyDuplicates()
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/_Game/Prefabs/Building/PF_PartsBinRack.prefab");
+
+            Assert.That(prefab, Is.Not.Null);
+            Assert.That(
+                prefab.GetComponentsInChildren<MeshRenderer>(true)
+                    .Count(renderer => renderer.name.StartsWith("Caixa_Organizadora_", System.StringComparison.Ordinal)),
+                Is.EqualTo(25),
+                "The saved prefab must expose all twenty-five v2 drawers through its nested FBX hierarchy.");
+
+            bool wasConfigured = ConfigurePrototypePartsBinRackSlotsMenu.TryGetBinSlotConfigurations(
+                prefab,
+                out List<ConfigurePrototypePartsBinRackSlotsMenu.BinSlotConfiguration> configurations,
+                out int rowCount,
+                out int columnCount);
+
+            Assert.That(wasConfigured, Is.True);
+            Assert.That(rowCount, Is.EqualTo(5));
+            Assert.That(columnCount, Is.EqualTo(5));
+            Assert.That(configurations.Count, Is.EqualTo(25));
+            Assert.That(configurations[0].slotId, Is.EqualTo("bin_r01_c01"));
+            Assert.That(configurations[19].slotId, Is.EqualTo("bin_r04_c05"));
+            Assert.That(configurations[24].slotId, Is.EqualTo("bin_r05_c05"));
+        }
+
+        [Test]
         public void ExistingOrganizerDefinitionPreservesLegacyIdsFootprintAndAccess()
         {
             FurnitureDefinition definition = AssetDatabase.LoadAssetAtPath<FurnitureDefinition>(
-                "Assets/_Game/ScriptableObjects/Furniture/DEF_PrototypePartsBinRack.asset");
+                "Assets/_Game/ScriptableObjects/Furniture/DEF_PartsBinRack.asset");
             Assert.That(definition, Is.Not.Null);
             Assert.That(definition.FurnitureTypeId, Is.EqualTo("prototype_parts_bin_rack"));
             Assert.That(definition.Width, Is.EqualTo(2));

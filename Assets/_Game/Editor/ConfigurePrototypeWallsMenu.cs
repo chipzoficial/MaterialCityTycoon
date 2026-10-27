@@ -14,8 +14,8 @@ namespace MaterialCityTycoon.EditorTools
         public static void Configure()
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode) { Debug.LogError("Exit Play Mode before configuring walls."); return; }
-            Scene scene = SceneManager.GetSceneByPath("Assets/_Game/Scenes/StorePrototype.unity");
-            if (!scene.IsValid() || !scene.isLoaded) { Debug.LogError("Open StorePrototype before configuring walls."); return; }
+            Scene scene = SceneManager.GetSceneByPath("Assets/_Game/Scenes/Store.unity");
+            if (!scene.IsValid() || !scene.isLoaded) { Debug.LogError("Open Store before configuring walls."); return; }
             var placements = Resources.FindObjectsOfTypeAll<FurniturePlacementController>().Where(x => x.gameObject.scene == scene).ToArray();
             var huds = Resources.FindObjectsOfTypeAll<BuildHud>().Where(x => x.gameObject.scene == scene).ToArray();
             var walls = Resources.FindObjectsOfTypeAll<WallConstructionController>().Where(x => x.gameObject.scene == scene).ToArray();
@@ -75,7 +75,7 @@ namespace MaterialCityTycoon.EditorTools
             hud.FindProperty("wallButton").objectReferenceValue = wall;
             hud.ApplyModifiedProperties();
             EditorSceneManager.MarkSceneDirty(scene);
-            Debug.Log("Prototype walls configured. Save StorePrototype manually.", controller);
+            Debug.Log("Prototype walls configured. Save Store manually.", controller);
         }
 
         private static Button CreateButton(string name, Transform parent, Font font, string label)

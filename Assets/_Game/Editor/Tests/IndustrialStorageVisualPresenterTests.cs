@@ -18,7 +18,7 @@ namespace MaterialCityTycoon.EditorTests
         [SetUp]
         public void SetUp()
         {
-            capacity = AssetDatabase.LoadAssetAtPath<StorageCapacityDefinition>("Assets/_Game/ScriptableObjects/Furniture/DEF_EstanteDeposito_StorageCapacity.asset");
+            capacity = AssetDatabase.LoadAssetAtPath<StorageCapacityDefinition>("Assets/_Game/ScriptableObjects/Furniture/DEF_IndustrialStorageShelfCapacity.asset");
             Assert.That(capacity, Is.Not.Null);
             product = capacity.Product;
             Assert.That(product.DisplayPrefab, Is.Not.Null);

@@ -2276,6 +2276,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MaterialCityTycoon.Building.FurniturePlacementController
   constructionGrid: {fileID: 815535897}
   cellPointer: {fileID: 1556583517}
+  walls: {fileID: 0}
   furnitureDefinitions:
   - {fileID: 11400000, guid: 100ba2357147b4f4287c50172fed04a3, type: 2}
   - {fileID: 11400000, guid: dbdfcfeeccdd7a345a96199a875d750b, type: 2}
@@ -3715,6 +3716,8 @@ MonoBehaviour:
   closeButton: {fileID: 776811417}
   displayCategoryButton: {fileID: 1644882037}
   storageCategoryButton: {fileID: 763009043}
+  structureCategoryButton: {fileID: 0}
+  wallButton: {fileID: 0}
   furnitureButtons:
   - {fileID: 1019071393}
   - {fileID: 1749174422}

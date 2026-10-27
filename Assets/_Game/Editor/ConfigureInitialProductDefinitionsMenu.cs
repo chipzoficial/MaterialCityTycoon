@@ -267,7 +267,7 @@ namespace MaterialCityTycoon.EditorTools
 
     public static class ConfigureFurnitureProductCatalogMenu
     {
-        private const string StorePrototypeScenePath = "Assets/_Game/Scenes/StorePrototype.unity";
+        private const string StoreScenePath = "Assets/_Game/Scenes/Store.unity";
         private const string ProductDefinitionsFolder = "Assets/_Game/ScriptableObjects/Products";
 
         [MenuItem("Tools/Material City Tycoon/Configure Furniture Product Catalog")]
@@ -279,10 +279,10 @@ namespace MaterialCityTycoon.EditorTools
                 return;
             }
 
-            Scene scene = SceneManager.GetSceneByPath(StorePrototypeScenePath);
+            Scene scene = SceneManager.GetSceneByPath(StoreScenePath);
             if (!scene.IsValid() || !scene.isLoaded)
             {
-                Debug.LogError($"Open '{StorePrototypeScenePath}' before running this command.");
+                Debug.LogError($"Open '{StoreScenePath}' before running this command.");
                 return;
             }
 
@@ -305,7 +305,7 @@ namespace MaterialCityTycoon.EditorTools
             EditorUtility.SetDirty(placementController);
             EditorSceneManager.MarkSceneDirty(scene);
             Debug.Log(
-                $"Furniture product catalog configured with {catalog.Count} definitions. StorePrototype was marked dirty; save the scene manually when ready.",
+                $"Furniture product catalog configured with {catalog.Count} definitions. Store was marked dirty; save the scene manually when ready.",
                 placementController);
         }
 

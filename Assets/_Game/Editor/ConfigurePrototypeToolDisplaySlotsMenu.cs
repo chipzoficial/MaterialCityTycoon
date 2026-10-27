@@ -9,8 +9,8 @@ namespace MaterialCityTycoon.EditorTools
 {
     public static class ConfigurePrototypeToolDisplaySlotsMenu
     {
-        private const string ToolDisplayDefinitionPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_PrototypeToolDisplay.asset";
-        private const string ToolDisplayPrefabPath = "Assets/_Game/Prefabs/Building/FB_PrototypeToolDisplay.prefab";
+        private const string ToolDisplayDefinitionPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_ToolDisplay.asset";
+        private const string ToolDisplayPrefabPath = "Assets/_Game/Prefabs/Building/PF_ToolDisplay.prefab";
         private const string ToolDisplayFurnitureTypeId = "prototype_tool_display";
         private const string PanelTransformName = "Panel_01";
         private const string SlotId = "tool_panel_main";

@@ -10,10 +10,10 @@ namespace MaterialCityTycoon.EditorTools
 {
     public static class ConfigurePrototypePartsBinRackSlotsMenu
     {
-        private const string PartsBinRackDefinitionPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_PrototypePartsBinRack.asset";
-        private const string PartsBinRackPrefabPath = "Assets/_Game/Prefabs/Building/DEF_PrototypePartsBinRack.prefab";
+        private const string PartsBinRackDefinitionPath = "Assets/_Game/ScriptableObjects/Furniture/DEF_PartsBinRack.asset";
+        private const string PartsBinRackPrefabPath = "Assets/_Game/Prefabs/Building/PF_PartsBinRack.prefab";
         private const string PartsBinRackFurnitureTypeId = "prototype_parts_bin_rack";
-        private const string PartsBinRackDefinitionName = "DEF_PrototypePartsBinRack";
+        private const string PartsBinRackDefinitionName = "DEF_PartsBinRack";
         private const string BinBottomTransformName = "Bin_bottom";
         private const float RowGroupingTolerance = 0.01f;
         private static readonly Regex NewBinMeshNamePattern = new(@"^Caixa_Organizadora_(\d{2})$", RegexOptions.CultureInvariant);
@@ -126,7 +126,7 @@ namespace MaterialCityTycoon.EditorTools
             return true;
         }
 
-        private static bool TryGetBinSlotConfigurations(
+        internal static bool TryGetBinSlotConfigurations(
             GameObject partsBinRackPrefab,
             out List<BinSlotConfiguration> configurations,
             out int rowCount,
@@ -135,12 +135,13 @@ namespace MaterialCityTycoon.EditorTools
             GameObject prefabContents = PrefabUtility.LoadPrefabContents(AssetDatabase.GetAssetPath(partsBinRackPrefab));
             try
             {
-                List<BinCandidate> bins = new();
+                List<BinCandidate> newOrganizerBins = new();
+                List<BinCandidate> legacyBins = new();
                 foreach (Transform candidate in prefabContents.GetComponentsInChildren<Transform>(true))
                 {
                     if (TryGetNewBinMeshCenter(prefabContents.transform, candidate, out Vector3 meshCenter))
                     {
-                        bins.Add(new BinCandidate(meshCenter, candidate.name));
+                        newOrganizerBins.Add(new BinCandidate(meshCenter));
                         continue;
                     }
 
@@ -157,9 +158,13 @@ namespace MaterialCityTycoon.EditorTools
                         return false;
                     }
 
-                    bins.Add(new BinCandidate(localDisplayPosition, null));
+                    legacyBins.Add(new BinCandidate(localDisplayPosition));
                 }
 
+                // The v2 prefab nests the imported FBX while retaining the legacy ProBuilder
+                // hierarchy. The named FBX drawers are the authoritative representation; mixing
+                // both sets makes an invalid composite layout and prevents the update.
+                List<BinCandidate> bins = newOrganizerBins.Count > 0 ? newOrganizerBins : legacyBins;
                 return TryCreateSpatialConfigurations(bins, out configurations, out rowCount, out columnCount);
             }
             finally
@@ -282,13 +287,6 @@ namespace MaterialCityTycoon.EditorTools
                 for (int columnIndex = 0; columnIndex < rows[rowIndex].Count; columnIndex++)
                 {
                     BinCandidate bin = rows[rowIndex][columnIndex];
-                    int expectedNumber = rowIndex * columnCount + columnIndex + 1;
-                    if (bin.modelName != null && bin.modelName != $"Caixa_Organizadora_{expectedNumber:D2}")
-                    {
-                        Debug.LogError("The new organizer drawer names do not match the required bottom-to-top, left-to-right order. No slots were configured.");
-                        configurations = null;
-                        return false;
-                    }
                     configurations.Add(new BinSlotConfiguration(
                         PartsBinRackSlotLayout.GetSlotId(rowIndex, columnIndex),
                         PartsBinRackSlotLayout.GetDisplayName(rowIndex, columnIndex),
@@ -404,12 +402,10 @@ namespace MaterialCityTycoon.EditorTools
         private readonly struct BinCandidate
         {
             public readonly Vector3 localDisplayPosition;
-            public readonly string modelName;
 
-            public BinCandidate(Vector3 localDisplayPosition, string modelName)
+            public BinCandidate(Vector3 localDisplayPosition)
             {
                 this.localDisplayPosition = localDisplayPosition;
-                this.modelName = modelName;
             }
 
             public static int CompareByHeightThenX(BinCandidate first, BinCandidate second)
@@ -426,7 +422,7 @@ namespace MaterialCityTycoon.EditorTools
             }
         }
 
-        private readonly struct BinSlotConfiguration
+        internal readonly struct BinSlotConfiguration
         {
             public readonly string slotId;
             public readonly string displayName;
