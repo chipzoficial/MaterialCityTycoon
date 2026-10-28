@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: eff17c26142135b4e952757f996f8e63, type: 3}
   m_Name: DEF_ToolDisplay
   m_EditorClassIdentifier: Assembly-CSharp::MaterialCityTycoon.Building.FurnitureDefinition
-  furnitureTypeId: prototype_tool_display
+  furnitureTypeId: tool_display
   displayName: Expositor de ferramentas
   prefab: {fileID: 4947576922067255395, guid: 80ba2531d39f52142a2760387ecfa5e5, type: 3}
   width: 1
@@ -26,3 +26,4 @@ MonoBehaviour:
   accessCellOffsets:
   - {x: 0, y: -1}
   - {x: 0, y: 1}
+  storageCapacity: {fileID: 0}

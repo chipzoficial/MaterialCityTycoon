@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: eff17c26142135b4e952757f996f8e63, type: 3}
   m_Name: DEF_PartsBinRack
   m_EditorClassIdentifier: Assembly-CSharp::MaterialCityTycoon.Building.FurnitureDefinition
-  furnitureTypeId: prototype_parts_bin_rack
+  furnitureTypeId: parts_bin_rack
   displayName: Organizador de ferragens
   prefab: {fileID: 4841568670893021314, guid: b2eb564179da19446a9d8959a71f256b, type: 3}
   width: 2

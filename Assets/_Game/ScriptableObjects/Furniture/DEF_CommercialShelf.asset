@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: eff17c26142135b4e952757f996f8e63, type: 3}
   m_Name: DEF_CommercialShelf
   m_EditorClassIdentifier: Assembly-CSharp::MaterialCityTycoon.Building.FurnitureDefinition
-  furnitureTypeId: prototype_shelf
+  furnitureTypeId: commercial_shelf
   displayName: Prateleira
   prefab: {fileID: 4584174187740437490, guid: 77776d08eb02c464f8ad892886e2f6ec, type: 3}
   width: 1
