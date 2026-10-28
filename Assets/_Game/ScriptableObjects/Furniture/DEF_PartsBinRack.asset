@@ -21,129 +21,134 @@ MonoBehaviour:
   - slotId: bin_r01_c01
     displayName: "Fileira 1 \u2014 Caixa 1"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: -0.624, y: 0.43883175, z: 0.031379376}
+    localDisplayPosition: {x: -0.624, y: 0.30474415, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r01_c02
     displayName: "Fileira 1 \u2014 Caixa 2"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: -0.312, y: 0.43883175, z: 0.031379376}
+    localDisplayPosition: {x: -0.312, y: 0.30474415, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r01_c03
     displayName: "Fileira 1 \u2014 Caixa 3"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: 0, y: 0.43883175, z: 0.031379376}
+    localDisplayPosition: {x: 0, y: 0.30474415, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r01_c04
     displayName: "Fileira 1 \u2014 Caixa 4"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: 0.312, y: 0.43883175, z: 0.031379376}
+    localDisplayPosition: {x: 0.312, y: 0.30474415, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r01_c05
     displayName: "Fileira 1 \u2014 Caixa 5"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: 0.624, y: 0.43883175, z: 0.031379376}
+    localDisplayPosition: {x: 0.624, y: 0.30474415, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r02_c01
     displayName: "Fileira 2 \u2014 Caixa 1"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: -0.624, y: 0.7988319, z: 0.031379376}
+    localDisplayPosition: {x: -0.624, y: 0.5547442, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r02_c02
     displayName: "Fileira 2 \u2014 Caixa 2"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: -0.312, y: 0.7988319, z: 0.031379376}
+    localDisplayPosition: {x: -0.312, y: 0.5547442, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r02_c03
     displayName: "Fileira 2 \u2014 Caixa 3"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: 0, y: 0.7988319, z: 0.031379376}
+    localDisplayPosition: {x: 0, y: 0.5547442, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r02_c04
     displayName: "Fileira 2 \u2014 Caixa 4"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: 0.312, y: 0.7988319, z: 0.031379376}
+    localDisplayPosition: {x: 0.312, y: 0.5547442, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r02_c05
     displayName: "Fileira 2 \u2014 Caixa 5"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: 0.624, y: 0.7988319, z: 0.031379376}
+    localDisplayPosition: {x: 0.624, y: 0.5547442, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r03_c01
     displayName: "Fileira 3 \u2014 Caixa 1"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: -0.624, y: 1.1588321, z: 0.031379376}
+    localDisplayPosition: {x: -0.624, y: 0.80474424, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r03_c02
     displayName: "Fileira 3 \u2014 Caixa 2"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: -0.312, y: 1.1588321, z: 0.031379376}
+    localDisplayPosition: {x: -0.312, y: 0.80474424, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r03_c03
     displayName: "Fileira 3 \u2014 Caixa 3"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: 0, y: 1.1588321, z: 0.031379376}
+    localDisplayPosition: {x: 0, y: 0.80474424, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r03_c04
     displayName: "Fileira 3 \u2014 Caixa 4"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: 0.312, y: 1.1588321, z: 0.031379376}
+    localDisplayPosition: {x: 0.312, y: 0.80474424, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r03_c05
     displayName: "Fileira 3 \u2014 Caixa 5"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: 0.624, y: 1.1588321, z: 0.031379376}
+    localDisplayPosition: {x: 0.624, y: 0.80474424, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r04_c01
     displayName: "Fileira 4 \u2014 Caixa 1"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: -0.624, y: 1.5188323, z: 0.031379376}
+    localDisplayPosition: {x: -0.624, y: 1.0547442, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r04_c02
     displayName: "Fileira 4 \u2014 Caixa 2"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: -0.312, y: 1.5188323, z: 0.031379376}
+    localDisplayPosition: {x: -0.312, y: 1.0547442, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r04_c03
     displayName: "Fileira 4 \u2014 Caixa 3"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: 0, y: 1.5188323, z: 0.031379376}
+    localDisplayPosition: {x: 0, y: 1.0547442, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r04_c04
     displayName: "Fileira 4 \u2014 Caixa 4"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: 0.312, y: 1.5188323, z: 0.031379376}
+    localDisplayPosition: {x: 0.312, y: 1.0547442, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r04_c05
     displayName: "Fileira 4 \u2014 Caixa 5"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: 0.624, y: 1.5188323, z: 0.031379376}
+    localDisplayPosition: {x: 0.624, y: 1.0547442, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r05_c01
     displayName: "Fileira 5 \u2014 Caixa 1"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: -0.624, y: 1.8788323, z: 0.031379376}
+    localDisplayPosition: {x: -0.624, y: 1.3047441, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r05_c02
     displayName: "Fileira 5 \u2014 Caixa 2"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: -0.312, y: 1.8788323, z: 0.031379376}
+    localDisplayPosition: {x: -0.312, y: 1.3047441, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r05_c03
     displayName: "Fileira 5 \u2014 Caixa 3"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: 0, y: 1.8788323, z: 0.031379376}
+    localDisplayPosition: {x: 0, y: 1.3047441, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r05_c04
     displayName: "Fileira 5 \u2014 Caixa 4"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: 0.312, y: 1.8788323, z: 0.031379376}
+    localDisplayPosition: {x: 0.312, y: 1.3047441, z: 0.031379376}
     capacityUnits: 0
   - slotId: bin_r05_c05
     displayName: "Fileira 5 \u2014 Caixa 5"
     allowedDisplayModes: 02000000i
-    localDisplayPosition: {x: 0.624, y: 1.8788323, z: 0.031379376}
+    localDisplayPosition: {x: 0.624, y: 1.3047441, z: 0.031379376}
     capacityUnits: 0
   accessCellOffsets:
   - {x: 0, y: 1}
   - {x: 1, y: 1}
+  accessGroups:
+  - groupId: front
+    cellOffsets:
+    - {x: 0, y: 1}
+    - {x: 1, y: 1}
   storageCapacity: {fileID: 0}

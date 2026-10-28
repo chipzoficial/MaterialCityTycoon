@@ -28,6 +28,151 @@ namespace MaterialCityTycoon.Building
         public bool TryAdd(WallEdge edge) => IsInside(edge) && edges.Add(edge);
         public bool Remove(WallEdge edge) => edges.Remove(edge);
 
+        /// <summary>Gets the grid edge separating two cardinally adjacent cells.</summary>
+        public static bool TryGetSeparatingEdge(Vector2Int firstCell, Vector2Int secondCell, out WallEdge edge)
+        {
+            int deltaX = secondCell.x - firstCell.x;
+            int deltaZ = secondCell.y - firstCell.y;
+            if (Mathf.Abs(deltaX) + Mathf.Abs(deltaZ) != 1)
+            {
+                edge = default;
+                return false;
+            }
+
+            edge = deltaX != 0
+                ? new WallEdge(Mathf.Max(firstCell.x, secondCell.x), firstCell.y, false)
+                : new WallEdge(firstCell.x, Mathf.Max(firstCell.y, secondCell.y), true);
+            return true;
+        }
+
+        public bool IsPassageBlocked(Vector2Int firstCell, Vector2Int secondCell)
+        {
+            return TryGetSeparatingEdge(firstCell, secondCell, out WallEdge edge) && Contains(edge);
+        }
+
+        /// <summary>
+        /// Converts a world point on the grid to its nearest grid vertex. Vertices, unlike
+        /// cells, include the outer boundary of the grid.
+        /// </summary>
+        public bool TryFindNearestVertex(Vector3 point, out Vector2Int vertex)
+        {
+            Vector3 min = grid.GetCellCenter(Vector2Int.zero, 0f) - new Vector3(grid.CellSize * 0.5f, 0f, grid.CellSize * 0.5f);
+            float x = (point.x - min.x) / grid.CellSize;
+            float z = (point.z - min.z) / grid.CellSize;
+            vertex = default;
+            if (float.IsNaN(x) || float.IsNaN(z) || x < 0f || z < 0f || x > grid.Width || z > grid.Height)
+            {
+                return false;
+            }
+
+            vertex = new Vector2Int(Mathf.FloorToInt(x + 0.5f), Mathf.FloorToInt(z + 0.5f));
+            return vertex.x >= 0 && vertex.x <= grid.Width && vertex.y >= 0 && vertex.y <= grid.Height;
+        }
+
+        /// <summary>
+        /// Writes the straight one-metre segments from start to end. Ties deliberately favour
+        /// X so a near-diagonal drag does not alternate axes from frame to frame.
+        /// </summary>
+        public void GetStraightLine(Vector2Int start, Vector2Int end, List<WallEdge> result)
+        {
+            if (result == null) throw new ArgumentNullException(nameof(result));
+            result.Clear();
+
+            int deltaX = end.x - start.x;
+            int deltaZ = end.y - start.y;
+            if (deltaX == 0 && deltaZ == 0)
+            {
+                return;
+            }
+
+            if (Mathf.Abs(deltaX) >= Mathf.Abs(deltaZ))
+            {
+                int step = deltaX >= 0 ? 1 : -1;
+                for (int index = 0; index < Mathf.Abs(deltaX); index++)
+                {
+                    int edgeX = step > 0 ? start.x + index : start.x - index - 1;
+                    result.Add(new WallEdge(edgeX, start.y, true));
+                }
+            }
+            else
+            {
+                int step = deltaZ >= 0 ? 1 : -1;
+                for (int index = 0; index < Mathf.Abs(deltaZ); index++)
+                {
+                    int edgeZ = step > 0 ? start.y + index : start.y - index - 1;
+                    result.Add(new WallEdge(start.x, edgeZ, false));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Builds a straight drag while preserving the edge selected at its start. If the
+        /// player changes to the other axis, it falls back to the snapped start vertex so the
+        /// drag remains a single, predictable straight line.
+        /// </summary>
+        public void GetStraightLineFromEdge(WallEdge startEdge, Vector2Int snappedStartVertex, Vector2Int end, List<WallEdge> result)
+        {
+            if (result == null) throw new ArgumentNullException(nameof(result));
+
+            int deltaX = end.x - snappedStartVertex.x;
+            int deltaZ = end.y - snappedStartVertex.y;
+            if (deltaX == 0 && deltaZ == 0)
+            {
+                result.Clear();
+                return;
+            }
+
+            bool alongX = Mathf.Abs(deltaX) >= Mathf.Abs(deltaZ);
+            if (startEdge.AlongX != alongX)
+            {
+                GetStraightLine(snappedStartVertex, end, result);
+                return;
+            }
+
+            bool positive = alongX ? deltaX > 0 : deltaZ > 0;
+            Vector2Int startVertex = alongX
+                ? new Vector2Int(startEdge.X + (positive ? 0 : 1), startEdge.Z)
+                : new Vector2Int(startEdge.X, startEdge.Z + (positive ? 0 : 1));
+            GetStraightLine(startVertex, end, result);
+        }
+
+        /// <summary>Checks a complete line before it is committed, preserving atomic construction.</summary>
+        public bool CanAddRange(IReadOnlyList<WallEdge> candidates)
+        {
+            if (candidates == null || candidates.Count == 0)
+            {
+                return false;
+            }
+
+            HashSet<WallEdge> unique = new();
+            for (int index = 0; index < candidates.Count; index++)
+            {
+                WallEdge edge = candidates[index];
+                if (!IsInside(edge) || Contains(edge) || !unique.Add(edge))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>Adds an entire validated line, or leaves occupancy unchanged.</summary>
+        public bool TryAddRange(IReadOnlyList<WallEdge> candidates)
+        {
+            if (!CanAddRange(candidates))
+            {
+                return false;
+            }
+
+            for (int index = 0; index < candidates.Count; index++)
+            {
+                edges.Add(candidates[index]);
+            }
+
+            return true;
+        }
+
         public bool TryFindNearest(Vector3 point, out WallEdge edge)
         {
             Vector3 min = grid.GetCellCenter(Vector2Int.zero, 0f) - new Vector3(grid.CellSize * 0.5f, 0f, grid.CellSize * 0.5f);

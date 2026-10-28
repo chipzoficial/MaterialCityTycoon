@@ -29,6 +29,14 @@ namespace MaterialCityTycoon.EditorTests
             shelf = Definition("DEF_CommercialShelf", new Vector2Int(-1, 0), new Vector2Int(-1, 1), new Vector2Int(1, 0), new Vector2Int(1, 1));
             tool = Definition("DEF_ToolDisplay", new Vector2Int(0, -1), new Vector2Int(0, 1));
             rack = Definition("DEF_PartsBinRack", new Vector2Int(0, 1), new Vector2Int(1, 1));
+            SetAccessGroups(shelf,
+                ("left", new[] { new Vector2Int(-1, 0), new Vector2Int(-1, 1) }),
+                ("right", new[] { new Vector2Int(1, 0), new Vector2Int(1, 1) }));
+            SetAccessGroups(tool,
+                ("front", new[] { new Vector2Int(0, -1) }),
+                ("back", new[] { new Vector2Int(0, 1) }));
+            SetAccessGroups(rack,
+                ("front", new[] { new Vector2Int(0, 1), new Vector2Int(1, 1) }));
             storage = Object.Instantiate(rack);
             SerializedObject storageData = new(storage);
             storageData.FindProperty("furnitureTypeId").stringValue = "industrial_storage_shelf";
@@ -41,6 +49,9 @@ namespace MaterialCityTycoon.EditorTests
             storageAccess.arraySize = bilateralAccess.Length;
             for (int i = 0; i < bilateralAccess.Length; i++) storageAccess.GetArrayElementAtIndex(i).vector2IntValue = bilateralAccess[i];
             storageData.ApplyModifiedPropertiesWithoutUndo();
+            SetAccessGroups(storage,
+                ("front", new[] { new Vector2Int(0, 1), new Vector2Int(1, 1) }),
+                ("back", new[] { new Vector2Int(0, -1), new Vector2Int(1, -1) }));
             var definitions = (List<FurnitureDefinition>)typeof(FurniturePlacementController).GetField("furnitureDefinitions", Flags).GetValue(controller);
             definitions.AddRange(new[] { shelf, tool, rack, storage });
         }
@@ -109,9 +120,9 @@ namespace MaterialCityTycoon.EditorTests
             object third = State("third", tool, new Vector2Int(3, 1));
             Assert.That(Register(third), Is.True); // Its +Z access shares (3, 2).
             Assert.That(Available(tool, new Vector2Int(3, 2)), Is.False); // X over shared O
-            Assert.That(Available(tool, new Vector2Int(2, 1)), Is.False); // O over existing X
+            Assert.That(Available(tool, new Vector2Int(2, 1)), Is.True); // Its opposite service face remains available.
             Assert.That(Available(shelf, new Vector2Int(2, 2)), Is.False); // X over X
-            Assert.That(Available(shelf, new Vector2Int(0, 4)), Is.False); // O outside grid
+            Assert.That(Available(shelf, new Vector2Int(0, 4)), Is.True); // The in-bounds service face remains available.
             typeof(FurniturePlacementController).GetMethod("UnregisterFurniture", Flags).Invoke(controller, new[] { first });
             typeof(FurniturePlacementController).GetMethod("UnregisterFurniture", Flags).Invoke(controller, new[] { second });
             typeof(FurniturePlacementController).GetMethod("UnregisterFurniture", Flags).Invoke(controller, new[] { third });
@@ -166,10 +177,10 @@ namespace MaterialCityTycoon.EditorTests
             Assert.That(Evaluate(shelf, new Vector2Int(4, 2), 0, null, cells), Is.True);
             Assert.That(cells.Count(cell => cell.Kind == PlacementCellKind.SharedAccess), Is.EqualTo(2));
             Assert.That(cells.Count(cell => cell.Kind == PlacementCellKind.FreeAccess), Is.EqualTo(2));
-            Assert.That(Evaluate(tool, new Vector2Int(2, 1), 0, null, cells), Is.False);
+            Assert.That(Evaluate(tool, new Vector2Int(2, 1), 0, null, cells), Is.True);
             Assert.That(cells.Any(cell => cell.Cell == new Vector2Int(2, 2) && cell.Kind == PlacementCellKind.BlockedAccess), Is.True);
-            Assert.That(cells.Count(cell => cell.Kind == PlacementCellKind.InvalidFootprint), Is.EqualTo(1));
-            Assert.That(Evaluate(shelf, new Vector2Int(0, 4), 0, null, cells), Is.False);
+            Assert.That(cells.Count(cell => cell.Kind == PlacementCellKind.ValidFootprint), Is.EqualTo(1));
+            Assert.That(Evaluate(shelf, new Vector2Int(0, 4), 0, null, cells), Is.True);
             Assert.That(cells.Any(cell => cell.Kind == PlacementCellKind.BlockedAccess), Is.True);
         }
 
@@ -214,12 +225,20 @@ namespace MaterialCityTycoon.EditorTests
         [TestCase(3, 3)]
         [TestCase(2, 1)]
         [TestCase(3, 1)]
-        public void IndustrialShelfRejectsEachBlockedAccessCell(int x, int z)
+        public void IndustrialShelfAllowsOneBlockedAlternativeAccessFace(int x, int z)
         {
-            Assert.That(Register(State("obstacle", tool, new Vector2Int(x, z))), Is.True);
-            List<PlacementPreviewCell> cells = new();
-            Assert.That(Evaluate(storage, new Vector2Int(2, 2), 0, null, cells), Is.False);
-            Assert.That(cells.Any(cell => cell.Cell == new Vector2Int(x, z) && cell.Kind == PlacementCellKind.BlockedAccess), Is.True);
+            FurnitureDefinition blocker = CreatePassiveBlocker();
+            try
+            {
+                Assert.That(Register(State("obstacle", blocker, new Vector2Int(x, z))), Is.True);
+                List<PlacementPreviewCell> cells = new();
+                Assert.That(Evaluate(storage, new Vector2Int(2, 2), 0, null, cells), Is.True);
+                Assert.That(cells.Any(cell => cell.Cell == new Vector2Int(x, z) && cell.Kind == PlacementCellKind.BlockedAccess), Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(blocker);
+            }
         }
 
         [Test]
@@ -783,6 +802,110 @@ namespace MaterialCityTycoon.EditorTests
             Assert.That(Available(tool, new Vector2Int(6, 2)), Is.False);
         }
 
+        [Test]
+        public void WallBetweenFurnitureAndAccessBlocksPlacementPreviewAndRotation()
+        {
+            WallEdges wallEdges = AttachWalls();
+            Assert.That(wallEdges.TryAdd(new WallEdge(6, 7, true)), Is.True);
+            Assert.That(wallEdges.TryAdd(new WallEdge(7, 7, true)), Is.True);
+
+            List<PlacementPreviewCell> cells = new();
+            Assert.That(Evaluate(rack, new Vector2Int(6, 6), 0, null, cells), Is.False);
+            Assert.That(cells.Any(cell => cell.Cell == new Vector2Int(6, 5)
+                && cell.Kind == PlacementCellKind.BlockedAccess), Is.False);
+            Assert.That(cells.Any(cell => cell.Cell == new Vector2Int(6, 7)
+                && cell.Kind == PlacementCellKind.BlockedAccess), Is.True);
+
+            Assert.That(Evaluate(rack, new Vector2Int(6, 6), 1, null, cells), Is.True);
+        }
+
+        [Test]
+        public void WallBehindFurnitureDoesNotBlockItsConfiguredAccess()
+        {
+            WallEdges wallEdges = AttachWalls();
+            Assert.That(wallEdges.TryAdd(new WallEdge(6, 6, true)), Is.True);
+
+            // The rack's two required access cells are on +Z, so a wall on -Z is harmless.
+            Assert.That(Available(rack, new Vector2Int(6, 6)), Is.True);
+        }
+
+        [Test]
+        public void ProposedWallsCannotRemoveExistingFurnitureAccesses()
+        {
+            WallEdges wallEdges = AttachWalls();
+            object placedRack = State("rack", rack, new Vector2Int(6, 6));
+            Assert.That(Register(placedRack), Is.True);
+
+            WallEdge[] blocksRackFront = { new(6, 7, true), new(7, 7, true) };
+            Assert.That(controller.AreExistingFurnitureAccessesAvailable(blocksRackFront), Is.False);
+
+            WallEdge[] behindRack = { new(6, 6, true) };
+            Assert.That(controller.AreExistingFurnitureAccessesAvailable(behindRack), Is.True);
+            Assert.That(wallEdges.CanAddRange(behindRack), Is.True);
+        }
+
+        [Test]
+        public void AlternativeAccessFacesAllowPlacementUntilBothSidesAreBlocked()
+        {
+            WallEdges wallEdges = AttachWalls();
+            List<PlacementPreviewCell> cells = new();
+
+            Assert.That(Evaluate(shelf, new Vector2Int(6, 6), 0, null, cells), Is.True);
+            Assert.That(wallEdges.TryAdd(new WallEdge(6, 6, false)), Is.True);
+            Assert.That(wallEdges.TryAdd(new WallEdge(6, 7, false)), Is.True);
+            Assert.That(Evaluate(shelf, new Vector2Int(6, 6), 0, null, cells), Is.True);
+            Assert.That(cells.Count(cell => cell.Kind == PlacementCellKind.BlockedAccess), Is.EqualTo(2));
+            Assert.That(cells.Count(cell => cell.Kind == PlacementCellKind.FreeAccess), Is.EqualTo(2));
+
+            Assert.That(wallEdges.TryAdd(new WallEdge(7, 6, false)), Is.True);
+            Assert.That(wallEdges.TryAdd(new WallEdge(7, 7, false)), Is.True);
+            Assert.That(Evaluate(shelf, new Vector2Int(6, 6), 0, null, cells), Is.False);
+            Assert.That(cells.Count(cell => cell.Kind == PlacementCellKind.BlockedAccess), Is.EqualTo(4));
+        }
+
+        [Test]
+        public void AlternativeAccessFacesRotateWithTheFurniture()
+        {
+            WallEdges wallEdges = AttachWalls();
+            List<PlacementPreviewCell> cells = new();
+            Assert.That(wallEdges.TryAdd(new WallEdge(6, 7, true)), Is.True);
+            Assert.That(wallEdges.TryAdd(new WallEdge(7, 7, true)), Is.True);
+
+            Assert.That(Evaluate(shelf, new Vector2Int(6, 6), 1, null, cells), Is.True);
+            Assert.That(cells.Count(cell => cell.Kind == PlacementCellKind.BlockedAccess), Is.EqualTo(2));
+            Assert.That(wallEdges.TryAdd(new WallEdge(6, 6, true)), Is.True);
+            Assert.That(wallEdges.TryAdd(new WallEdge(7, 6, true)), Is.True);
+            Assert.That(Evaluate(shelf, new Vector2Int(6, 6), 1, null, cells), Is.False);
+        }
+
+        [Test]
+        public void ProposedWallsMayBlockOneAlternativeFaceButNotTheLast()
+        {
+            AttachWalls();
+            Assert.That(Register(State("double-face", shelf, new Vector2Int(6, 6))), Is.True);
+
+            WallEdge[] blockLeftFace = { new(6, 6, false), new(6, 7, false) };
+            WallEdge[] blockBothFaces =
+            {
+                new(6, 6, false), new(6, 7, false), new(7, 6, false), new(7, 7, false)
+            };
+            Assert.That(controller.AreExistingFurnitureAccessesAvailable(blockLeftFace), Is.True);
+            Assert.That(controller.AreExistingFurnitureAccessesAvailable(blockBothFaces), Is.False);
+        }
+
+        [Test]
+        public void SingleFaceFurnitureStillRequiresEveryCellOfItsConfiguredFace()
+        {
+            WallEdges wallEdges = AttachWalls();
+            List<PlacementPreviewCell> cells = new();
+            Assert.That(wallEdges.TryAdd(new WallEdge(6, 7, true)), Is.True);
+            Assert.That(Evaluate(rack, new Vector2Int(6, 6), 0, null, cells), Is.False);
+            Assert.That(cells.Any(cell => cell.Cell == new Vector2Int(6, 7)
+                && cell.Kind == PlacementCellKind.BlockedAccess), Is.True);
+            Assert.That(cells.Any(cell => cell.Cell == new Vector2Int(7, 7)
+                && cell.Kind == PlacementCellKind.FreeAccess), Is.True);
+        }
+
         private MaterialCityTycoon.Commerce.ProductDefinition PrepareRestocking()
         {
             var product = AssetDatabase.LoadAssetAtPath<MaterialCityTycoon.Commerce.ProductDefinition>("Assets/_Game/ScriptableObjects/Products/DEF_Argamassa.asset");
@@ -811,6 +934,41 @@ namespace MaterialCityTycoon.EditorTests
             return definition;
         }
 
+        private static void SetAccessGroups(
+            FurnitureDefinition definition,
+            params (string id, Vector2Int[] cells)[] groups)
+        {
+            SerializedObject serialized = new(definition);
+            SerializedProperty groupsProperty = serialized.FindProperty("accessGroups");
+            groupsProperty.arraySize = groups.Length;
+            for (int groupIndex = 0; groupIndex < groups.Length; groupIndex++)
+            {
+                SerializedProperty group = groupsProperty.GetArrayElementAtIndex(groupIndex);
+                group.FindPropertyRelative("groupId").stringValue = groups[groupIndex].id;
+                SerializedProperty cells = group.FindPropertyRelative("cellOffsets");
+                cells.arraySize = groups[groupIndex].cells.Length;
+                for (int cellIndex = 0; cellIndex < groups[groupIndex].cells.Length; cellIndex++)
+                {
+                    cells.GetArrayElementAtIndex(cellIndex).vector2IntValue = groups[groupIndex].cells[cellIndex];
+                }
+            }
+
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private FurnitureDefinition CreatePassiveBlocker()
+        {
+            FurnitureDefinition blocker = Object.Instantiate(tool);
+            SerializedObject serialized = new(blocker);
+            serialized.FindProperty("furnitureTypeId").stringValue = "test_access_blocker";
+            serialized.FindProperty("accessCellOffsets").arraySize = 0;
+            serialized.FindProperty("accessGroups").arraySize = 0;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            ((List<FurnitureDefinition>)typeof(FurniturePlacementController)
+                .GetField("furnitureDefinitions", Flags).GetValue(controller)).Add(blocker);
+            return blocker;
+        }
+
         private static object State(string id, FurnitureDefinition definition, Vector2Int anchor, int rotation = 0)
         {
             System.Type type = typeof(FurniturePlacementController).GetNestedType("PlacedFurnitureState", Flags);
@@ -818,6 +976,17 @@ namespace MaterialCityTycoon.EditorTests
         }
 
         private bool Register(object state) => (bool)typeof(FurniturePlacementController).GetMethod("TryRegisterFurniture", Flags).Invoke(controller, new[] { state });
+
+        private WallEdges AttachWalls()
+        {
+            var grid = owner.GetComponent<ConstructionGrid>();
+            var wallController = owner.AddComponent<WallConstructionController>();
+            WallEdges wallEdges = new(grid);
+            typeof(WallConstructionController).GetField("grid", Flags).SetValue(wallController, grid);
+            typeof(WallConstructionController).GetField("edges", Flags).SetValue(wallController, wallEdges);
+            typeof(FurniturePlacementController).GetField("walls", Flags).SetValue(controller, wallController);
+            return wallEdges;
+        }
 
         private bool Evaluate(FurnitureDefinition definition, Vector2Int anchor, int rotation, string ignoredId, List<PlacementPreviewCell> cells) =>
             (bool)typeof(FurniturePlacementController).GetMethod("EvaluatePlacement", Flags)

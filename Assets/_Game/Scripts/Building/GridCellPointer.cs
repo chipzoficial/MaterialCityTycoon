@@ -26,11 +26,27 @@ namespace MaterialCityTycoon.Building
         private Renderer[] indicatorRenderers;
         private Material[][] originalIndicatorMaterials;
         private Material overrideIndicatorMaterial;
+        private bool indicatorSuppressed;
 
         public bool TryGetPointedCell(out Vector2Int cell)
         {
             cell = pointedCell;
             return hasPointedCell;
+        }
+
+        /// <summary>Temporarily hides the cell-only indicator without changing its furniture-placement behavior.</summary>
+        public void SetIndicatorSuppressed(bool suppressed)
+        {
+            if (indicatorSuppressed == suppressed)
+            {
+                return;
+            }
+
+            indicatorSuppressed = suppressed;
+            if (indicatorSuppressed)
+            {
+                HideIndicator();
+            }
         }
 
         private void Awake()
@@ -102,6 +118,12 @@ namespace MaterialCityTycoon.Building
 
         private void Update()
         {
+            if (indicatorSuppressed)
+            {
+                HideIndicator();
+                return;
+            }
+
             Mouse mouse = Mouse.current;
             if (mouse == null)
             {

@@ -84,6 +84,8 @@ namespace MaterialCityTycoon.Building
             DestroyPreviewVisual();
             DisposeCellPreview();
             if (cellPointer != null) cellPointer.RestoreIndicatorMaterial();
+            walls.SetCellPointer(cellPointer);
+            walls.SetPlacementController(this);
             walls.SetActive(true);
             return true;
         }
@@ -1210,8 +1212,8 @@ namespace MaterialCityTycoon.Building
                     continue;
                 }
 
-                foreach (Vector2Int cell in FurnitureAccessCells.GetCells(other.anchorCell, other.width,
-                             other.depth, other.rotationQuarterTurns, otherDefinition.AccessCellOffsets))
+                foreach (Vector2Int cell in GetAccessCells(other.anchorCell, other.width,
+                             other.depth, other.rotationQuarterTurns, otherDefinition))
                 {
                     otherAccess.Add(cell);
                     if (proposedFootprint.Contains(cell))
@@ -1221,14 +1223,36 @@ namespace MaterialCityTycoon.Building
                 }
             }
 
-            foreach (Vector2Int cell in FurnitureAccessCells.GetCells(anchorCell, furnitureWidth,
-                         furnitureDepth, rotationQuarterTurns, definition.AccessCellOffsets))
+            bool hasAccessGroup = false;
+            bool hasAvailableAccessGroup = false;
+            foreach (IReadOnlyList<Vector2Int> groupOffsets in definition.GetAccessCellGroups())
             {
-                bool blocked = !constructionGrid.IsInside(cell) || proposedFootprint.Contains(cell)
-                    || (occupancyByCell.TryGetValue(cell, out string occupantId) && occupantId != ignoredFurnitureId);
-                if (blocked) valid = false;
-                cells?.Add(new PlacementPreviewCell(cell, blocked ? PlacementCellKind.BlockedAccess
-                    : otherAccess.Contains(cell) ? PlacementCellKind.SharedAccess : PlacementCellKind.FreeAccess));
+                hasAccessGroup = true;
+                bool groupIsAvailable = true;
+                foreach (Vector2Int cell in FurnitureAccessCells.GetCells(anchorCell, furnitureWidth,
+                             furnitureDepth, rotationQuarterTurns, groupOffsets))
+                {
+                    bool blocked = !constructionGrid.IsInside(cell) || proposedFootprint.Contains(cell)
+                        || (occupancyByCell.TryGetValue(cell, out string occupantId) && occupantId != ignoredFurnitureId)
+                        || !HasOpenAccessPassage(cell, proposedFootprint, null);
+                    if (blocked)
+                    {
+                        groupIsAvailable = false;
+                    }
+
+                    cells?.Add(new PlacementPreviewCell(cell, blocked ? PlacementCellKind.BlockedAccess
+                        : otherAccess.Contains(cell) ? PlacementCellKind.SharedAccess : PlacementCellKind.FreeAccess));
+                }
+
+                if (groupIsAvailable)
+                {
+                    hasAvailableAccessGroup = true;
+                }
+            }
+
+            if (hasAccessGroup && !hasAvailableAccessGroup)
+            {
+                valid = false;
             }
 
             if (cells != null)
@@ -1240,6 +1264,141 @@ namespace MaterialCityTycoon.Building
             }
 
             return valid;
+        }
+
+        /// <summary>
+        /// Checks whether adding wall segments would leave at least one complete configured
+        /// service face available for every built furniture instance.
+        /// </summary>
+        public bool AreExistingFurnitureAccessesAvailable(IReadOnlyList<WallEdge> additionalWalls)
+        {
+            if (additionalWalls == null || additionalWalls.Count == 0)
+            {
+                return false;
+            }
+
+            foreach (PlacedFurnitureState furniture in furnitureById.Values)
+            {
+                if (!TryGetFurnitureDefinition(furniture, out FurnitureDefinition definition))
+                {
+                    return false;
+                }
+
+                HashSet<Vector2Int> footprint = new(GetOccupiedCells(
+                    furniture.anchorCell,
+                    furniture.width,
+                    furniture.depth,
+                    furniture.rotationQuarterTurns));
+                if (!HasAvailableAccessGroup(furniture.anchorCell, furniture.width, furniture.depth,
+                        furniture.rotationQuarterTurns, definition, footprint, additionalWalls))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static IEnumerable<Vector2Int> GetAccessCells(
+            Vector2Int anchorCell,
+            int furnitureWidth,
+            int furnitureDepth,
+            int rotationQuarterTurns,
+            FurnitureDefinition definition)
+        {
+            foreach (IReadOnlyList<Vector2Int> groupOffsets in definition.GetAccessCellGroups())
+            {
+                foreach (Vector2Int cell in FurnitureAccessCells.GetCells(
+                             anchorCell,
+                             furnitureWidth,
+                             furnitureDepth,
+                             rotationQuarterTurns,
+                             groupOffsets))
+                {
+                    yield return cell;
+                }
+            }
+        }
+
+        private bool HasAvailableAccessGroup(
+            Vector2Int anchorCell,
+            int furnitureWidth,
+            int furnitureDepth,
+            int rotationQuarterTurns,
+            FurnitureDefinition definition,
+            HashSet<Vector2Int> footprint,
+            IReadOnlyList<WallEdge> additionalWalls)
+        {
+            bool hasAccessGroup = false;
+            foreach (IReadOnlyList<Vector2Int> groupOffsets in definition.GetAccessCellGroups())
+            {
+                hasAccessGroup = true;
+                bool groupIsAvailable = true;
+                foreach (Vector2Int accessCell in FurnitureAccessCells.GetCells(
+                             anchorCell,
+                             furnitureWidth,
+                             furnitureDepth,
+                             rotationQuarterTurns,
+                             groupOffsets))
+                {
+                    if (!HasOpenAccessPassage(accessCell, footprint, additionalWalls))
+                    {
+                        groupIsAvailable = false;
+                        break;
+                    }
+                }
+
+                if (groupIsAvailable)
+                {
+                    return true;
+                }
+            }
+
+            return !hasAccessGroup;
+        }
+
+        private bool HasOpenAccessPassage(
+            Vector2Int accessCell,
+            HashSet<Vector2Int> footprint,
+            IReadOnlyList<WallEdge> additionalWalls)
+        {
+            foreach (Vector2Int physicalCell in footprint)
+            {
+                if (!WallEdges.TryGetSeparatingEdge(physicalCell, accessCell, out WallEdge edge))
+                {
+                    continue;
+                }
+
+                if (!IsWallBlockingPassage(edge, additionalWalls))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool IsWallBlockingPassage(WallEdge edge, IReadOnlyList<WallEdge> additionalWalls)
+        {
+            if (walls != null && walls.ContainsEdge(edge))
+            {
+                return true;
+            }
+
+            if (additionalWalls == null)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < additionalWalls.Count; index++)
+            {
+                if (additionalWalls[index].Equals(edge))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void AddFurnitureOccupancy(PlacedFurnitureState furniture)
