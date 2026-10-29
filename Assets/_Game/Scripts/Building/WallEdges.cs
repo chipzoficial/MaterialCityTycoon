@@ -28,6 +28,62 @@ namespace MaterialCityTycoon.Building
         public bool TryAdd(WallEdge edge) => IsInside(edge) && edges.Add(edge);
         public bool Remove(WallEdge edge) => edges.Remove(edge);
 
+        /// <summary>
+        /// Counts occupied segments that meet at a grid vertex. Optional candidates are
+        /// treated as proposed segments so preview and final geometry share one topology.
+        /// </summary>
+        public int GetConnectionCountAtVertex(Vector2Int vertex, IReadOnlyList<WallEdge> candidates = null)
+        {
+            int count = 0;
+            CountIfPresent(new WallEdge(vertex.x - 1, vertex.y, true));
+            CountIfPresent(new WallEdge(vertex.x, vertex.y, true));
+            CountIfPresent(new WallEdge(vertex.x, vertex.y - 1, false));
+            CountIfPresent(new WallEdge(vertex.x, vertex.y, false));
+            return count;
+
+            void CountIfPresent(WallEdge edge)
+            {
+                if (IsInside(edge) && (Contains(edge) || IncludesCandidate(candidates, edge)))
+                {
+                    count++;
+                }
+            }
+        }
+
+        private static bool IncludesCandidate(IReadOnlyList<WallEdge> candidates, WallEdge edge)
+        {
+            if (candidates == null) return false;
+            for (int index = 0; index < candidates.Count; index++)
+            {
+                if (candidates[index].Equals(edge)) return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>Gets the candidate endpoints where at least two wall segments meet.</summary>
+        public void GetAffectedJunctionVertices(IReadOnlyList<WallEdge> candidates, List<Vector2Int> result)
+        {
+            if (candidates == null) throw new ArgumentNullException(nameof(candidates));
+            if (result == null) throw new ArgumentNullException(nameof(result));
+
+            result.Clear();
+            HashSet<Vector2Int> endpoints = new();
+            foreach (WallEdge edge in candidates)
+            {
+                endpoints.Add(new Vector2Int(edge.X, edge.Z));
+                endpoints.Add(edge.AlongX ? new Vector2Int(edge.X + 1, edge.Z) : new Vector2Int(edge.X, edge.Z + 1));
+            }
+
+            foreach (Vector2Int endpoint in endpoints)
+            {
+                if (GetConnectionCountAtVertex(endpoint, candidates) >= 2)
+                {
+                    result.Add(endpoint);
+                }
+            }
+        }
+
         /// <summary>Gets the grid edge separating two cardinally adjacent cells.</summary>
         public static bool TryGetSeparatingEdge(Vector2Int firstCell, Vector2Int secondCell, out WallEdge edge)
         {
@@ -191,9 +247,15 @@ namespace MaterialCityTycoon.Building
 
         public Vector3 Center(WallEdge edge, float baseHeight, float wallHeight)
         {
+            Vector3 vertex = GetVertexPosition(new Vector2Int(edge.X, edge.Z), baseHeight);
+            return new Vector3(vertex.x + (edge.AlongX ? 0.5f : 0f) * grid.CellSize,
+                baseHeight + wallHeight * 0.5f, vertex.z + (edge.AlongX ? 0f : 0.5f) * grid.CellSize);
+        }
+
+        public Vector3 GetVertexPosition(Vector2Int vertex, float baseHeight)
+        {
             Vector3 min = grid.GetCellCenter(Vector2Int.zero, 0f) - new Vector3(grid.CellSize * 0.5f, 0f, grid.CellSize * 0.5f);
-            return new Vector3(min.x + (edge.X + (edge.AlongX ? 0.5f : 0f)) * grid.CellSize,
-                baseHeight + wallHeight * 0.5f, min.z + (edge.Z + (edge.AlongX ? 0f : 0.5f)) * grid.CellSize);
+            return new Vector3(min.x + vertex.x * grid.CellSize, baseHeight, min.z + vertex.y * grid.CellSize);
         }
     }
 }

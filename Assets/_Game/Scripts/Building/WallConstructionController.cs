@@ -13,8 +13,11 @@ namespace MaterialCityTycoon.Building
         [SerializeField] private GridCellPointer cellPointer;
         private FurniturePlacementController placementController;
         private readonly Dictionary<WallEdge, GameObject> visuals = new();
+        private readonly Dictionary<Vector2Int, GameObject> jointVisuals = new();
         private readonly List<WallEdge> draggedEdges = new();
         private readonly List<GameObject> previewVisuals = new();
+        private readonly List<GameObject> previewJointVisuals = new();
+        private readonly List<Vector2Int> affectedJunctions = new();
         private WallEdges edges;
         private Material wallMaterial, validMaterial, invalidMaterial;
         private WallEdge dragStartEdge;
@@ -133,11 +136,15 @@ namespace MaterialCityTycoon.Building
             }
 
             if (keyboard != null && keyboard.deleteKey.wasPressedThisFrame
-                && edges.TryFindNearest(hit.point, out WallEdge edge) && edges.Remove(edge)
-                && visuals.TryGetValue(edge, out GameObject old))
+                && edges.TryFindNearest(hit.point, out WallEdge edge) && edges.Remove(edge))
             {
-                visuals.Remove(edge);
-                Destroy(old);
+                if (visuals.TryGetValue(edge, out GameObject old))
+                {
+                    visuals.Remove(edge);
+                    Destroy(old);
+                }
+
+                RefreshFinalJunctionVisuals(new[] { edge }, hit.point.y);
             }
 
             if (mouse.leftButton.wasPressedThisFrame
@@ -202,6 +209,7 @@ namespace MaterialCityTycoon.Building
             if (CanAddWalls(draggedEdges) && edges.TryAddRange(draggedEdges))
             {
                 visuals.Add(dragStartEdge, CreateWallVisual(dragStartEdge, dragBaseHeight, wallMaterial));
+                RefreshFinalJunctionVisuals(draggedEdges, dragBaseHeight);
             }
 
             CancelDrag();
@@ -215,6 +223,7 @@ namespace MaterialCityTycoon.Building
                 {
                     visuals.Add(edge, CreateWallVisual(edge, dragBaseHeight, wallMaterial));
                 }
+                RefreshFinalJunctionVisuals(draggedEdges, dragBaseHeight);
             }
 
             CancelDrag();
@@ -233,6 +242,7 @@ namespace MaterialCityTycoon.Building
             }
 
             for (int index = draggedEdges.Count; index < previewVisuals.Count; index++) previewVisuals[index].SetActive(false);
+            ShowPreviewJunctionVisuals(draggedEdges, baseHeight, material);
         }
 
         private void ShowHoveredEdge(WallEdge edge, float baseHeight)
@@ -243,6 +253,7 @@ namespace MaterialCityTycoon.Building
             draggedEdges.Clear();
             draggedEdges.Add(edge);
             visual.GetComponent<Renderer>().sharedMaterial = CanAddWalls(draggedEdges) ? validMaterial : invalidMaterial;
+            ShowPreviewJunctionVisuals(draggedEdges, baseHeight, visual.GetComponent<Renderer>().sharedMaterial);
             draggedEdges.Clear();
             visual.SetActive(true);
 
@@ -278,6 +289,95 @@ namespace MaterialCityTycoon.Building
             return visual;
         }
 
+        private void RefreshFinalJunctionVisuals(IReadOnlyList<WallEdge> affectedEdges, float fallbackBaseHeight)
+        {
+            foreach (WallEdge edge in affectedEdges)
+            {
+                RefreshFinalJunctionVisual(new Vector2Int(edge.X, edge.Z), fallbackBaseHeight);
+                RefreshFinalJunctionVisual(edge.AlongX
+                    ? new Vector2Int(edge.X + 1, edge.Z)
+                    : new Vector2Int(edge.X, edge.Z + 1), fallbackBaseHeight);
+            }
+        }
+
+        private void RefreshFinalJunctionVisual(Vector2Int vertex, float fallbackBaseHeight)
+        {
+            if (edges.GetConnectionCountAtVertex(vertex) < 2)
+            {
+                if (jointVisuals.TryGetValue(vertex, out GameObject obsolete))
+                {
+                    jointVisuals.Remove(vertex);
+                    DestroyVisual(obsolete);
+                }
+                return;
+            }
+
+            float baseHeight = GetJunctionBaseHeight(vertex, fallbackBaseHeight);
+            if (!jointVisuals.TryGetValue(vertex, out GameObject joint))
+            {
+                jointVisuals.Add(vertex, CreateWallJointVisual(vertex, baseHeight, wallMaterial));
+            }
+            else
+            {
+                PositionJoint(joint, vertex, baseHeight);
+            }
+        }
+
+        private float GetJunctionBaseHeight(Vector2Int vertex, float fallback)
+        {
+            WallEdge[] incident =
+            {
+                new WallEdge(vertex.x - 1, vertex.y, true), new WallEdge(vertex.x, vertex.y, true),
+                new WallEdge(vertex.x, vertex.y - 1, false), new WallEdge(vertex.x, vertex.y, false)
+            };
+            foreach (WallEdge edge in incident)
+            {
+                if (visuals.TryGetValue(edge, out GameObject visual) && visual != null)
+                {
+                    return visual.transform.position.y - WallHeight * 0.5f;
+                }
+            }
+
+            return fallback;
+        }
+
+        private void ShowPreviewJunctionVisuals(IReadOnlyList<WallEdge> candidates, float baseHeight, Material material)
+        {
+            edges.GetAffectedJunctionVertices(candidates, affectedJunctions);
+            for (int index = 0; index < affectedJunctions.Count; index++)
+            {
+                GameObject joint = GetPreviewJointVisual(index);
+                PositionJoint(joint, affectedJunctions[index], baseHeight);
+                joint.GetComponent<Renderer>().sharedMaterial = material;
+                joint.SetActive(true);
+            }
+
+            for (int index = affectedJunctions.Count; index < previewJointVisuals.Count; index++) previewJointVisuals[index].SetActive(false);
+        }
+
+        private GameObject GetPreviewJointVisual(int index)
+        {
+            while (previewJointVisuals.Count <= index)
+            {
+                GameObject preview = CreateWallJointVisual(default, 0f, validMaterial, "Wall Preview Joint", true);
+                preview.SetActive(false);
+                previewJointVisuals.Add(preview);
+            }
+
+            return previewJointVisuals[index];
+        }
+
+        private GameObject CreateWallJointVisual(Vector2Int vertex, float baseHeight, Material material, string name = "Wall Joint", bool isPreview = false)
+        {
+            GameObject visual = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            visual.name = name;
+            visual.transform.SetParent(transform, false);
+            visual.GetComponent<Collider>().enabled = !isPreview;
+            visual.GetComponent<Renderer>().sharedMaterial = material;
+            PositionJoint(visual, vertex, baseHeight);
+            return visual;
+        }
+
         private void EnsureMaterials()
         {
             if (wallMaterial != null) return;
@@ -301,6 +401,20 @@ namespace MaterialCityTycoon.Building
             visual.transform.localScale = edge.AlongX ? new Vector3(grid.CellSize, WallHeight, Thickness) : new Vector3(Thickness, WallHeight, grid.CellSize);
         }
 
+        private void PositionJoint(GameObject visual, Vector2Int vertex, float baseHeight)
+        {
+            visual.transform.position = edges.GetVertexPosition(vertex, baseHeight) + Vector3.up * (WallHeight * 0.5f);
+            visual.transform.rotation = Quaternion.identity;
+            visual.transform.localScale = new Vector3(Thickness, WallHeight, Thickness);
+        }
+
+        private static void DestroyVisual(Object visual)
+        {
+            if (visual == null) return;
+            if (Application.isPlaying) Destroy(visual);
+            else DestroyImmediate(visual);
+        }
+
         private void CancelDrag()
         {
             dragging = false;
@@ -313,6 +427,11 @@ namespace MaterialCityTycoon.Building
         private void HidePreviewVisuals()
         {
             foreach (GameObject preview in previewVisuals)
+            {
+                if (preview != null) preview.SetActive(false);
+            }
+
+            foreach (GameObject preview in previewJointVisuals)
             {
                 if (preview != null) preview.SetActive(false);
             }

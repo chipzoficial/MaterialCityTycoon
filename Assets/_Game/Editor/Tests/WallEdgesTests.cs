@@ -181,5 +181,118 @@ namespace MaterialCityTycoon.EditorTests
             List<WallEdge> duplicate = new() { new(8, 2, true), new(8, 2, true) };
             Assert.That(walls.TryAddRange(duplicate), Is.False);
         }
+
+        [Test]
+        public void JunctionTopologyRecognizesStraightCornerTAndCrossWithoutChangingOccupancy()
+        {
+            Vector2Int vertex = new(5, 5);
+            WallEdge west = new(4, 5, true);
+            WallEdge east = new(5, 5, true);
+            WallEdge north = new(5, 5, false);
+            WallEdge south = new(5, 4, false);
+
+            Assert.That(walls.TryAddRange(new[] { west, east }), Is.True);
+            Assert.That(walls.GetConnectionCountAtVertex(vertex), Is.EqualTo(2));
+
+            Assert.That(walls.TryAdd(north), Is.True);
+            Assert.That(walls.GetConnectionCountAtVertex(vertex), Is.EqualTo(3));
+
+            Assert.That(walls.TryAdd(south), Is.True);
+            Assert.That(walls.GetConnectionCountAtVertex(vertex), Is.EqualTo(4));
+            Assert.That(walls.Contains(west) && walls.Contains(east) && walls.Contains(north) && walls.Contains(south), Is.True);
+        }
+
+        [Test]
+        public void RightAngleCornerAndOpenEndAreDistinguished()
+        {
+            Vector2Int corner = new(5, 5);
+            WallEdge horizontal = new(4, 5, true);
+            WallEdge vertical = new(5, 5, false);
+            Assert.That(walls.TryAddRange(new[] { horizontal, vertical }), Is.True);
+
+            Assert.That(walls.GetConnectionCountAtVertex(corner), Is.EqualTo(2));
+            Assert.That(walls.GetConnectionCountAtVertex(new Vector2Int(4, 5)), Is.EqualTo(1));
+            Assert.That(walls.GetConnectionCountAtVertex(new Vector2Int(5, 6)), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void PreviewCandidatesUseTheSameJunctionTopologyAsFinalWalls()
+        {
+            WallEdge existing = new(4, 5, true);
+            WallEdge proposed = new(5, 5, false);
+            Assert.That(walls.TryAdd(existing), Is.True);
+
+            List<Vector2Int> junctions = new();
+            walls.GetAffectedJunctionVertices(new[] { proposed }, junctions);
+
+            CollectionAssert.AreEquivalent(new[] { new Vector2Int(5, 5) }, junctions);
+            Assert.That(walls.GetConnectionCountAtVertex(new Vector2Int(5, 5), new[] { proposed }), Is.EqualTo(2));
+            Assert.That(walls.Contains(proposed), Is.False);
+        }
+
+        [Test]
+        public void RemovingAndRebuildingAnEdgeUpdatesTheSameJunctionTopology()
+        {
+            WallEdge[] cross =
+            {
+                new(4, 5, true), new(5, 5, true), new(5, 5, false), new(5, 4, false)
+            };
+            Vector2Int vertex = new(5, 5);
+            Assert.That(walls.TryAddRange(cross), Is.True);
+            Assert.That(walls.GetConnectionCountAtVertex(vertex), Is.EqualTo(4));
+
+            Assert.That(walls.Remove(cross[3]), Is.True);
+            Assert.That(walls.GetConnectionCountAtVertex(vertex), Is.EqualTo(3));
+            Assert.That(walls.Remove(cross[2]), Is.True);
+            Assert.That(walls.GetConnectionCountAtVertex(vertex), Is.EqualTo(2));
+            Assert.That(walls.TryAdd(cross[2]), Is.True);
+            Assert.That(walls.GetConnectionCountAtVertex(vertex), Is.EqualTo(3));
+            Assert.That(walls.Contains(cross[0]) && walls.Contains(cross[1]), Is.True);
+        }
+
+        [Test]
+        public void WallJointVisualMatchesWallHeightAndPreviewHasNoCollider()
+        {
+            WallConstructionController controller = owner.AddComponent<WallConstructionController>();
+            const BindingFlags privateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
+            typeof(WallConstructionController).GetField("grid", privateInstance).SetValue(controller, grid);
+            typeof(WallConstructionController).GetField("edges", privateInstance).SetValue(controller, walls);
+            MethodInfo create = typeof(WallConstructionController).GetMethod("CreateWallJointVisual", privateInstance);
+
+            GameObject joint = (GameObject)create.Invoke(controller, new object[] { new Vector2Int(4, 5), 0f, null, "joint", false });
+            GameObject preview = (GameObject)create.Invoke(controller, new object[] { new Vector2Int(4, 5), 0f, null, "preview", true });
+
+            Assert.That(joint.transform.localScale.y, Is.EqualTo(3f));
+            Assert.That(joint.transform.position.y, Is.EqualTo(1.5f));
+            Assert.That(joint.GetComponent<Collider>().enabled, Is.True);
+            Assert.That(preview.GetComponent<Collider>().enabled, Is.False);
+        }
+
+        [Test]
+        public void FinalJunctionVisualIsCreatedAndRemovedWithItsAffectedEdges()
+        {
+            WallConstructionController controller = owner.AddComponent<WallConstructionController>();
+            const BindingFlags privateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
+            typeof(WallConstructionController).GetField("grid", privateInstance).SetValue(controller, grid);
+            typeof(WallConstructionController).GetField("edges", privateInstance).SetValue(controller, walls);
+            MethodInfo create = typeof(WallConstructionController).GetMethod("CreateWallVisual", privateInstance);
+            MethodInfo refresh = typeof(WallConstructionController).GetMethod("RefreshFinalJunctionVisuals", privateInstance);
+            var visualMap = (Dictionary<WallEdge, GameObject>)typeof(WallConstructionController)
+                .GetField("visuals", privateInstance).GetValue(controller);
+            var junctionMap = (Dictionary<Vector2Int, GameObject>)typeof(WallConstructionController)
+                .GetField("jointVisuals", privateInstance).GetValue(controller);
+            WallEdge west = new(4, 5, true);
+            WallEdge east = new(5, 5, true);
+
+            Assert.That(walls.TryAddRange(new[] { west, east }), Is.True);
+            visualMap.Add(west, (GameObject)create.Invoke(controller, new object[] { west, 0f, null, null, false }));
+            visualMap.Add(east, (GameObject)create.Invoke(controller, new object[] { east, 0f, null, null, false }));
+            refresh.Invoke(controller, new object[] { new[] { west, east }, 0f });
+            Assert.That(junctionMap.ContainsKey(new Vector2Int(5, 5)), Is.True);
+
+            Assert.That(walls.Remove(east), Is.True);
+            refresh.Invoke(controller, new object[] { new[] { east }, 0f });
+            Assert.That(junctionMap.ContainsKey(new Vector2Int(5, 5)), Is.False);
+        }
     }
 }
