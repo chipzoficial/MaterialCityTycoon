@@ -906,6 +906,79 @@ namespace MaterialCityTycoon.EditorTests
                 && cell.Kind == PlacementCellKind.FreeAccess), Is.True);
         }
 
+        [Test]
+        public void FurnitureCannotOccupyEitherCellOfAnInstalledDoorway()
+        {
+            WallEdges wallEdges = AttachWalls();
+            WallEdge doorway = new(6, 7, true);
+            Assert.That(wallEdges.TryAdd(doorway), Is.True);
+            Assert.That(wallEdges.TryInstallDoor(doorway), Is.True);
+            Assert.That(controller.AreDoorwayCellsClear(new Vector2Int(6, 6), new Vector2Int(6, 7)), Is.True);
+
+            FurnitureDefinition blocker = CreatePassiveBlocker();
+            Assert.That(Register(State("doorway-blocker", blocker, new Vector2Int(6, 6))), Is.False);
+            Assert.That(controller.AreDoorwayCellsClear(new Vector2Int(6, 6), new Vector2Int(6, 7)), Is.True);
+            Assert.That(Available(tool, new Vector2Int(6, 7)), Is.False);
+        }
+
+        [Test]
+        public void ExternalDoorRequiresItsSingleInteriorCellToBeClear()
+        {
+            WallEdges wallEdges = AttachWalls();
+            WallEdge exteriorDoorway = new(0, 6, false);
+            Vector2Int interiorCell = new(0, 6);
+            Assert.That(wallEdges.TryAdd(exteriorDoorway), Is.True);
+
+            FurnitureDefinition blocker = CreatePassiveBlocker();
+            Assert.That(Register(State("external-door-blocker", blocker, interiorCell)), Is.True);
+            MethodInfo canInstallDoor = typeof(WallConstructionController).GetMethod("CanInstallDoor", Flags);
+            var wallController = (WallConstructionController)typeof(FurniturePlacementController).GetField("walls", Flags).GetValue(controller);
+            Assert.That((bool)canInstallDoor.Invoke(wallController, new object[] { exteriorDoorway }), Is.False);
+        }
+
+        [Test]
+        public void FurnitureCannotOccupyTheInteriorCellOfAnInstalledExternalDoor()
+        {
+            WallEdges wallEdges = AttachWalls();
+            WallEdge exteriorDoorway = new(0, 6, false);
+            Vector2Int interiorCell = new(0, 6);
+            Assert.That(wallEdges.TryAdd(exteriorDoorway), Is.True);
+            Assert.That(wallEdges.TryInstallDoor(exteriorDoorway), Is.True);
+            Assert.That(wallEdges.IsExternalDoor(exteriorDoorway), Is.True);
+            Assert.That(controller.IsDoorwayCellClear(interiorCell), Is.True);
+
+            FurnitureDefinition blocker = CreatePassiveBlocker();
+            Assert.That(Register(State("external-door-blocker", blocker, interiorCell)), Is.False);
+            Assert.That(Available(tool, interiorCell), Is.False);
+        }
+
+        [Test]
+        public void DiagonalCellsConservativelyBlockFurnitureFootprintsAndRequiredAccesses()
+        {
+            WallEdges wallEdges = AttachWalls();
+            WallEdge footprintDiagonal = new(6, 6, WallEdgeOrientation.DiagonalAscending);
+            Assert.That(wallEdges.TryAdd(footprintDiagonal), Is.True);
+            Assert.That(Available(tool, new Vector2Int(6, 6)), Is.False);
+
+            WallEdge accessDiagonal = new(8, 7, WallEdgeOrientation.DiagonalDescending);
+            Assert.That(wallEdges.TryAdd(accessDiagonal), Is.True);
+            Assert.That(Available(rack, new Vector2Int(8, 6)), Is.False);
+        }
+
+        [Test]
+        public void ProposedDiagonalsCannotCrossFurnitureOrItsLastRequiredAccessFace()
+        {
+            AttachWalls();
+            Assert.That(Register(State("rack", rack, new Vector2Int(6, 6))), Is.True);
+            WallEdge footprint = new(6, 6, WallEdgeOrientation.DiagonalAscending);
+            WallEdge access = new(6, 7, WallEdgeOrientation.DiagonalDescending);
+            WallEdge clear = new(4, 4, WallEdgeOrientation.DiagonalAscending);
+            Assert.That(controller.AreDiagonalCellsClear(new[] { footprint }), Is.False);
+            Assert.That(controller.AreDiagonalCellsClear(new[] { access }), Is.False);
+            Assert.That(controller.AreDiagonalCellsClear(new[] { clear }), Is.True);
+            Assert.That(controller.AreExistingFurnitureAccessesAvailable(new[] { access }), Is.False);
+        }
+
         private MaterialCityTycoon.Commerce.ProductDefinition PrepareRestocking()
         {
             var product = AssetDatabase.LoadAssetAtPath<MaterialCityTycoon.Commerce.ProductDefinition>("Assets/_Game/ScriptableObjects/Products/DEF_Argamassa.asset");
@@ -984,6 +1057,7 @@ namespace MaterialCityTycoon.EditorTests
             WallEdges wallEdges = new(grid);
             typeof(WallConstructionController).GetField("grid", Flags).SetValue(wallController, grid);
             typeof(WallConstructionController).GetField("edges", Flags).SetValue(wallController, wallEdges);
+            typeof(WallConstructionController).GetField("placementController", Flags).SetValue(wallController, controller);
             typeof(FurniturePlacementController).GetField("walls", Flags).SetValue(controller, wallController);
             return wallEdges;
         }

@@ -35,9 +35,15 @@ namespace MaterialCityTycoon.EditorTools
             { Debug.LogError("Build HUD, ground, camera or wall controller configuration is incomplete."); return; }
             Transform categoryExisting = catalog.transform.Find("StructureCategory");
             Transform wallExisting = catalog.transform.Find("WallButton");
+            Transform diagonalAscendingExisting = catalog.transform.Find("DiagonalAscendingButton");
+            Transform diagonalDescendingExisting = catalog.transform.Find("DiagonalDescendingButton");
+            Transform doorExisting = catalog.transform.Find("DoorButton");
             if ((categoryExisting != null && categoryExisting.GetComponent<Button>() == null)
-                || (wallExisting != null && wallExisting.GetComponent<Button>() == null))
-            { Debug.LogError("A conflicting StructureCategory or WallButton object exists."); return; }
+                || (wallExisting != null && wallExisting.GetComponent<Button>() == null)
+                || (diagonalAscendingExisting != null && diagonalAscendingExisting.GetComponent<Button>() == null)
+                || (diagonalDescendingExisting != null && diagonalDescendingExisting.GetComponent<Button>() == null)
+                || (doorExisting != null && doorExisting.GetComponent<Button>() == null))
+            { Debug.LogError("A conflicting structure button object exists."); return; }
             WallConstructionController controller;
             if (walls.Length == 0)
             {
@@ -58,10 +64,14 @@ namespace MaterialCityTycoon.EditorTools
             placement.ApplyModifiedProperties();
             Button structure = categoryExisting != null ? categoryExisting.GetComponent<Button>() : CreateButton("StructureCategory", catalog.transform, font, "Estrutura");
             Button wall = wallExisting != null ? wallExisting.GetComponent<Button>() : CreateButton("WallButton", catalog.transform, font, "Parede");
+            Button door = doorExisting != null ? doorExisting.GetComponent<Button>() : CreateButton("DoorButton", catalog.transform, font, "Porta");
             SetRect(display.GetComponent<RectTransform>(), new Vector2(18, 218), new Vector2(105, 44));
             SetRect(storage.GetComponent<RectTransform>(), new Vector2(130, 218), new Vector2(105, 44));
             SetRect(structure.GetComponent<RectTransform>(), new Vector2(242, 218), new Vector2(108, 44));
-            SetRect(wall.GetComponent<RectTransform>(), new Vector2(18, 159), new Vector2(332, 44));
+            SetRect(wall.GetComponent<RectTransform>(), new Vector2(18, 159), new Vector2(160, 44));
+            SetRect(door.GetComponent<RectTransform>(), new Vector2(190, 159), new Vector2(160, 44));
+            SetObsoleteButtonInactive(diagonalAscendingExisting);
+            SetObsoleteButtonInactive(diagonalDescendingExisting);
             // Existing category icons take too much horizontal space in the compact three-tab row.
             foreach (Button button in new[] { display, storage })
             {
@@ -73,6 +83,7 @@ namespace MaterialCityTycoon.EditorTools
             Undo.RecordObject(huds[0], "Configure walls HUD");
             hud.FindProperty("structureCategoryButton").objectReferenceValue = structure;
             hud.FindProperty("wallButton").objectReferenceValue = wall;
+            hud.FindProperty("doorButton").objectReferenceValue = door;
             hud.ApplyModifiedProperties();
             EditorSceneManager.MarkSceneDirty(scene);
             Debug.Log("Walls configured. Save Store manually.", controller);
@@ -96,6 +107,13 @@ namespace MaterialCityTycoon.EditorTools
         {
             Undo.RecordObject(rect, "Arrange build categories");
             rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.zero; rect.anchoredPosition = position; rect.sizeDelta = size;
+        }
+
+        private static void SetObsoleteButtonInactive(Transform button)
+        {
+            if (button == null || !button.gameObject.activeSelf) return;
+            Undo.RecordObject(button.gameObject, "Hide obsolete diagonal wall button");
+            button.gameObject.SetActive(false);
         }
     }
 }

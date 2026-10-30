@@ -18,6 +18,7 @@ namespace MaterialCityTycoon.EditorTests
         private Button[] furniture;
         private Button display;
         private Button storage;
+        private Button door;
         private readonly List<FurnitureDefinition> definitions = new();
 
         [SetUp]
@@ -37,9 +38,11 @@ namespace MaterialCityTycoon.EditorTests
             catalog = new GameObject("catalog"); catalog.transform.SetParent(owner.transform);
             Button build = MakeButton("build"), close = MakeButton("close");
             display = MakeButton("display"); storage = MakeButton("storage");
+            door = MakeButton("door");
             furniture = new[] { MakeButton("one"), MakeButton("two"), MakeButton("three"), MakeButton("four") };
             Set("placement", placement); Set("catalog", catalog); Set("buildButton", build); Set("closeButton", close);
             Set("displayCategoryButton", display); Set("storageCategoryButton", storage); Set("furnitureButtons", furniture);
+            Set("doorButton", door);
             typeof(BuildHud).GetMethod("Awake", Private).Invoke(hud, null);
         }
 
@@ -89,6 +92,9 @@ namespace MaterialCityTycoon.EditorTests
             Assert.That(placement.SelectWallTool(), Is.True);
             Assert.That(placement.IsPlacementModeActive, Is.True);
             Assert.That(placement.IsWallModeActive, Is.True);
+            door.onClick.Invoke();
+            Assert.That(placement.IsDoorToolActive, Is.True);
+            Assert.That(placement.IsWallModeActive, Is.False);
             Assert.That(placement.SelectFurnitureDefinition(definitions[0]), Is.True);
             Assert.That(placement.IsWallModeActive, Is.False);
             Assert.That(placement.SelectedFurnitureDefinition, Is.SameAs(definitions[0]));

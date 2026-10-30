@@ -13,6 +13,8 @@ namespace MaterialCityTycoon.Building
         [SerializeField] private GridCellPointer cellPointer;
         private FurniturePlacementController placementController;
         private readonly Dictionary<WallEdge, GameObject> visuals = new();
+        private readonly Dictionary<WallEdge, GameObject> doorVisuals = new();
+        private readonly Dictionary<WallEdge, float> doorBaseHeights = new();
         private readonly Dictionary<Vector2Int, GameObject> jointVisuals = new();
         private readonly List<WallEdge> draggedEdges = new();
         private readonly List<GameObject> previewVisuals = new();
@@ -22,15 +24,23 @@ namespace MaterialCityTycoon.Building
         private Material wallMaterial, validMaterial, invalidMaterial;
         private WallEdge dragStartEdge;
         private Vector2Int dragStartVertex;
+        private Vector3 dragStartGridPoint;
         private Vector2 dragStartScreenPosition;
         private float dragBaseHeight;
         private bool dragging;
         private bool dragExceededThreshold;
         private bool dragIsValid;
+        private bool doorToolActive;
+        private GameObject doorPreviewVisual;
         private const float WallHeight = 3f;
-        private const float Thickness = 0.12f;
+        private const float DoorOpeningHeight = 2.1f;
+        private const float Thickness = 0.15f;
+        private const float DoorPreviewOutlineThickness = 0.035f;
+        private const float DoorPreviewOutlineDepth = Thickness + 0.01f;
         private const float DragThresholdPixels = 8f;
         public bool IsActive { get; private set; }
+        public bool IsWallToolActive => IsActive && !doorToolActive;
+        public bool IsDoorToolActive => IsActive && doorToolActive;
         public bool CanOperate => grid != null && inputCamera != null && ground != null;
 
         public void SetCellPointer(GridCellPointer pointer)
@@ -62,11 +72,39 @@ namespace MaterialCityTycoon.Building
             return edges != null && edges.Contains(edge);
         }
 
+        public bool IsPassageBlocked(WallEdge edge)
+        {
+            if (edges == null) return true;
+            if (edges.IsExternalEdge(edge)) return !edges.IsExternalPassageOpen(edge);
+            return !edges.TryGetAdjacentCells(edge, out Vector2Int first, out Vector2Int second)
+                || edges.IsPassageBlocked(first, second);
+        }
+
+        public bool IsDoorwayCell(Vector2Int cell) => edges != null && edges.IsDoorwayCell(cell);
+        public bool IsDiagonalCellBlocked(Vector2Int cell) => edges != null && edges.ContainsDiagonalAtCell(cell);
+
+        public void SetWallToolActive(bool active)
+        {
+            doorToolActive = false;
+            SetActive(active);
+        }
+
+        public void SetDoorToolActive(bool active)
+        {
+            doorToolActive = active;
+            SetActive(active);
+        }
+
         public void SetActive(bool active)
         {
             IsActive = active && CanOperate;
             if (cellPointer != null) cellPointer.SetIndicatorSuppressed(IsActive);
-            if (!IsActive) CancelDrag();
+            if (!IsActive)
+            {
+                doorToolActive = false;
+                CancelDrag();
+                HideDoorPreview();
+            }
         }
 
         private void Update()
@@ -81,6 +119,12 @@ namespace MaterialCityTycoon.Building
             Mouse mouse = Mouse.current;
             Keyboard keyboard = Keyboard.current;
 
+            if (doorToolActive)
+            {
+                UpdateDoorTool(mouse, keyboard);
+                return;
+            }
+
             if (dragging && keyboard != null
                 && (keyboard.escapeKey.wasPressedThisFrame || keyboard.bKey.wasPressedThisFrame
                     || keyboard.digit1Key.wasPressedThisFrame || keyboard.digit2Key.wasPressedThisFrame
@@ -90,16 +134,16 @@ namespace MaterialCityTycoon.Building
                 return;
             }
 
-            bool hasGroundHit = TryGetGroundHit(mouse, out RaycastHit hit);
+            bool hasGroundPoint = TryGetGridPoint(mouse, out Vector3 gridPoint);
 
             if (dragging)
             {
-                if (hasGroundHit)
+                if (hasGroundPoint)
                 {
                     if (HasExceededDragThreshold(dragStartScreenPosition, mouse.position.ReadValue()))
                     {
                         dragExceededThreshold = true;
-                        UpdateDrag(hit);
+                        UpdateDrag(gridPoint);
                     }
                     else
                     {
@@ -129,14 +173,19 @@ namespace MaterialCityTycoon.Building
                 return;
             }
 
-            if (!hasGroundHit)
+            if (!hasGroundPoint)
             {
                 HidePreviewVisuals();
                 return;
             }
 
             if (keyboard != null && keyboard.deleteKey.wasPressedThisFrame
-                && edges.TryFindNearest(hit.point, out WallEdge edge) && edges.Remove(edge))
+                && edges.TryFindNearestExisting(gridPoint, out WallEdge edge) && edges.IsDoor(edge))
+            {
+                RestoreWallFromDoor(edge, GetGroundSurfaceHeight());
+            }
+            else if (keyboard != null && keyboard.deleteKey.wasPressedThisFrame
+                && edges.TryFindNearestExisting(gridPoint, out edge) && edges.Remove(edge))
             {
                 if (visuals.TryGetValue(edge, out GameObject old))
                 {
@@ -144,40 +193,132 @@ namespace MaterialCityTycoon.Building
                     Destroy(old);
                 }
 
-                RefreshFinalJunctionVisuals(new[] { edge }, hit.point.y);
+                RefreshFinalJunctionVisuals(new[] { edge }, GetGroundSurfaceHeight());
             }
 
             if (mouse.leftButton.wasPressedThisFrame
-                && edges.TryFindNearest(hit.point, out WallEdge startEdge)
-                && edges.TryFindNearestVertex(hit.point, out Vector2Int startVertex))
+                && edges.TryFindNearest(gridPoint, out WallEdge startEdge)
+                && edges.TryFindNearestVertex(gridPoint, out Vector2Int startVertex))
             {
                 dragging = true;
                 dragStartEdge = startEdge;
                 dragStartVertex = startVertex;
+                dragStartGridPoint = gridPoint;
                 dragStartScreenPosition = mouse.position.ReadValue();
-                dragBaseHeight = hit.point.y;
+                dragBaseHeight = GetGroundSurfaceHeight();
                 dragExceededThreshold = false;
                 dragIsValid = false;
                 draggedEdges.Clear();
                 ShowHoveredEdge(dragStartEdge, dragBaseHeight);
             }
-            else if (edges.TryFindNearest(hit.point, out WallEdge hoveredEdge))
+            else if (edges.TryFindNearest(gridPoint, out WallEdge hoveredEdge))
             {
-                ShowHoveredEdge(hoveredEdge, hit.point.y);
+                ShowHoveredEdge(hoveredEdge, GetGroundSurfaceHeight());
             }
         }
 
-        private bool TryGetGroundHit(Mouse mouse, out RaycastHit hit)
+        private bool TryGetGridPoint(Mouse mouse, out Vector3 gridPoint)
         {
-            hit = default;
+            gridPoint = default;
             if (FurniturePlacementController.IsMouseOverUi(mouse)) return false;
             Ray ray = inputCamera.ScreenPointToRay(mouse.position.ReadValue());
-            return ground.Raycast(ray, out hit, 500f);
+            return TryProjectRayToGridPlane(ray, out gridPoint);
         }
 
-        private void UpdateDrag(RaycastHit hit)
+        /// <summary>
+        /// Projects directly onto the horizontal construction surface instead of raycasting the
+        /// Ground box collider. Near an exterior border, a collider raycast can hit a vertical
+        /// side face and produce a fractional height that is not part of the construction grid.
+        /// </summary>
+        private bool TryProjectRayToGridPlane(Ray ray, out Vector3 gridPoint)
         {
-            if (!edges.TryFindNearestVertex(hit.point, out Vector2Int endVertex))
+            gridPoint = default;
+            Plane gridPlane = new(Vector3.up, new Vector3(0f, GetGroundSurfaceHeight(), 0f));
+            if (!gridPlane.Raycast(ray, out float distance) || distance > 500f)
+            {
+                return false;
+            }
+
+            gridPoint = ray.GetPoint(distance);
+            return edges != null && edges.TryFindNearest(gridPoint, out _);
+        }
+
+        private float GetGroundSurfaceHeight() => ground.bounds.max.y;
+
+        private void UpdateDoorTool(Mouse mouse, Keyboard keyboard)
+        {
+            if (!TryGetGridPoint(mouse, out Vector3 gridPoint)
+                || !edges.TryFindNearest(gridPoint, out WallEdge edge))
+            {
+                HideDoorPreview();
+                return;
+            }
+
+            if (edges.IsDoor(edge))
+            {
+                if (keyboard != null && keyboard.deleteKey.wasPressedThisFrame)
+                {
+                    RestoreWallFromDoor(edge, GetGroundSurfaceHeight());
+                    ShowDoorPreview(edge, GetGroundSurfaceHeight(), CanInstallDoor(edge));
+                }
+                else
+                {
+                    HideDoorPreview();
+                }
+                return;
+            }
+
+            bool isValid = CanInstallDoor(edge);
+            ShowDoorPreview(edge, GetGroundSurfaceHeight(), isValid);
+            if (mouse.leftButton.wasPressedThisFrame && isValid && edges.TryInstallDoor(edge))
+            {
+                float baseHeight = GetWallBaseHeight(edge, GetGroundSurfaceHeight());
+                doorBaseHeights[edge] = baseHeight;
+                if (visuals.TryGetValue(edge, out GameObject wall))
+                {
+                    visuals.Remove(edge);
+                    DestroyVisual(wall);
+                }
+
+                doorVisuals[edge] = CreateDoorVisual(edge, baseHeight, wallMaterial);
+                ShowDoorPreview(edge, baseHeight, false);
+            }
+        }
+
+        private bool CanInstallDoor(WallEdge edge)
+        {
+            if (!edges.CanInstallDoor(edge))
+            {
+                return false;
+            }
+
+            if (edges.TryGetAdjacentCells(edge, out Vector2Int firstCell, out Vector2Int secondCell))
+            {
+                return placementController == null || placementController.AreDoorwayCellsClear(firstCell, secondCell);
+            }
+
+            return edges.TryGetExternalDoorInteriorCell(edge, out Vector2Int interiorCell)
+                && (placementController == null || placementController.IsDoorwayCellClear(interiorCell));
+        }
+
+        private void RestoreWallFromDoor(WallEdge edge, float fallbackBaseHeight)
+        {
+            if (!edges.RemoveDoor(edge)) return;
+
+            float baseHeight = doorBaseHeights.TryGetValue(edge, out float stored) ? stored : fallbackBaseHeight;
+            doorBaseHeights.Remove(edge);
+            if (doorVisuals.TryGetValue(edge, out GameObject door))
+            {
+                doorVisuals.Remove(edge);
+                DestroyVisual(door);
+            }
+
+            visuals[edge] = CreateWallVisual(edge, baseHeight, wallMaterial);
+        }
+
+        private void UpdateDrag(Vector3 gridPoint)
+        {
+            if (!edges.TryFindNearestVertex(gridPoint, out Vector2Int endVertex))
             {
                 draggedEdges.Clear();
                 dragIsValid = false;
@@ -185,7 +326,31 @@ namespace MaterialCityTycoon.Building
                 return;
             }
 
-            edges.GetStraightLineFromEdge(dragStartEdge, dragStartVertex, endVertex, draggedEdges);
+            Vector3 worldDelta = gridPoint - dragStartGridPoint;
+            WallEdgeOrientation orientation = WallEdges.GetSnappedOrientation(new Vector2(worldDelta.x, worldDelta.z));
+            if (orientation == WallEdgeOrientation.DiagonalAscending || orientation == WallEdgeOrientation.DiagonalDescending)
+            {
+                bool ascending = orientation == WallEdgeOrientation.DiagonalAscending;
+                if (!edges.TryFindNearestDiagonal(dragStartGridPoint, ascending, out WallEdge diagonalStart)
+                    || !edges.TryFindNearestDiagonal(gridPoint, ascending, out WallEdge diagonalEnd)
+                    || !edges.GetDiagonalLineFromDirection(diagonalStart, new Vector2Int(diagonalEnd.X, diagonalEnd.Z), draggedEdges))
+                {
+                    draggedEdges.Clear();
+                }
+            }
+            else
+            {
+                if (dragStartEdge.Orientation == orientation)
+                {
+                    // Preserve the initially highlighted edge when the drag keeps its axis.
+                    edges.GetStraightLineFromEdge(dragStartEdge, dragStartVertex, endVertex, draggedEdges);
+                }
+                else
+                {
+                    edges.GetOrthogonalLine(dragStartVertex, endVertex,
+                        orientation == WallEdgeOrientation.AlongX, draggedEdges);
+                }
+            }
             if (draggedEdges.Count == 0)
             {
                 dragIsValid = false;
@@ -263,7 +428,8 @@ namespace MaterialCityTycoon.Building
         private bool CanAddWalls(IReadOnlyList<WallEdge> candidates)
         {
             return edges.CanAddRange(candidates)
-                && (placementController == null || placementController.AreExistingFurnitureAccessesAvailable(candidates));
+                && (placementController == null || (placementController.AreDiagonalCellsClear(candidates)
+                    && placementController.AreExistingFurnitureAccessesAvailable(candidates)));
         }
 
         private GameObject GetPreviewVisual(int index)
@@ -281,7 +447,7 @@ namespace MaterialCityTycoon.Building
         private GameObject CreateWallVisual(WallEdge edge, float baseHeight, Material material, string name = null, bool isPreview = false)
         {
             GameObject visual = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            visual.name = name ?? $"Wall_{(edge.AlongX ? "X" : "Z")}_{edge.X}_{edge.Z}";
+            visual.name = name ?? $"Wall_{edge.Orientation}_{edge.X}_{edge.Z}";
             visual.transform.SetParent(transform, false);
             visual.GetComponent<Collider>().enabled = !isPreview;
             visual.GetComponent<Renderer>().sharedMaterial = material;
@@ -289,10 +455,72 @@ namespace MaterialCityTycoon.Building
             return visual;
         }
 
+        private GameObject CreateDoorVisual(WallEdge edge, float baseHeight, Material material, string name = null, bool isPreview = false)
+        {
+            GameObject root = new(name ?? $"Door_{(edge.AlongX ? "X" : "Z")}_{edge.X}_{edge.Z}");
+            root.transform.SetParent(transform, false);
+            root.transform.position = edges.Center(edge, baseHeight, 0f);
+            root.transform.rotation = Quaternion.identity;
+            root.transform.localScale = Vector3.one;
+
+            if (isPreview)
+            {
+                CreateDoorOpeningOutline(root, edge);
+            }
+            else
+            {
+                GameObject lintel = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                lintel.name = "Door Lintel";
+                lintel.transform.SetParent(root.transform, false);
+                lintel.transform.localPosition = Vector3.up * (DoorOpeningHeight + (WallHeight - DoorOpeningHeight) * 0.5f);
+                lintel.transform.localRotation = Quaternion.identity;
+                lintel.transform.localScale = edge.AlongX
+                    ? new Vector3(grid.CellSize, WallHeight - DoorOpeningHeight, Thickness)
+                    : new Vector3(Thickness, WallHeight - DoorOpeningHeight, grid.CellSize);
+                lintel.GetComponent<Collider>().enabled = true;
+                lintel.GetComponent<Renderer>().sharedMaterial = material;
+            }
+            return root;
+        }
+
+        private void ShowDoorPreview(WallEdge edge, float baseHeight, bool isValid)
+        {
+            EnsureMaterials();
+            if (doorPreviewVisual == null)
+            {
+                doorPreviewVisual = CreateDoorVisual(edge, baseHeight, isValid ? validMaterial : invalidMaterial, "Door Preview", true);
+            }
+            else
+            {
+                PositionDoor(doorPreviewVisual, edge, baseHeight);
+            }
+
+            Material material = isValid ? validMaterial : invalidMaterial;
+            foreach (Renderer renderer in doorPreviewVisual.GetComponentsInChildren<Renderer>(true))
+            {
+                renderer.sharedMaterial = material;
+            }
+
+            doorPreviewVisual.SetActive(true);
+        }
+
+        private void HideDoorPreview()
+        {
+            if (doorPreviewVisual != null) doorPreviewVisual.SetActive(false);
+        }
+
+        private float GetWallBaseHeight(WallEdge edge, float fallback)
+        {
+            return visuals.TryGetValue(edge, out GameObject visual) && visual != null
+                ? visual.transform.position.y - WallHeight * 0.5f
+                : fallback;
+        }
+
         private void RefreshFinalJunctionVisuals(IReadOnlyList<WallEdge> affectedEdges, float fallbackBaseHeight)
         {
             foreach (WallEdge edge in affectedEdges)
             {
+                if (edge.IsDiagonal) continue;
                 RefreshFinalJunctionVisual(new Vector2Int(edge.X, edge.Z), fallbackBaseHeight);
                 RefreshFinalJunctionVisual(edge.AlongX
                     ? new Vector2Int(edge.X + 1, edge.Z)
@@ -397,6 +625,13 @@ namespace MaterialCityTycoon.Building
         private void Position(GameObject visual, WallEdge edge, float baseHeight)
         {
             visual.transform.position = edges.Center(edge, baseHeight, WallHeight);
+            if (edge.IsDiagonal)
+            {
+                visual.transform.rotation = Quaternion.Euler(0f, edge.IsAscendingDiagonal ? 45f : -45f, 0f);
+                visual.transform.localScale = new Vector3(Mathf.Sqrt(2f) * grid.CellSize, WallHeight, Thickness);
+                return;
+            }
+
             visual.transform.rotation = Quaternion.identity;
             visual.transform.localScale = edge.AlongX ? new Vector3(grid.CellSize, WallHeight, Thickness) : new Vector3(Thickness, WallHeight, grid.CellSize);
         }
@@ -406,6 +641,65 @@ namespace MaterialCityTycoon.Building
             visual.transform.position = edges.GetVertexPosition(vertex, baseHeight) + Vector3.up * (WallHeight * 0.5f);
             visual.transform.rotation = Quaternion.identity;
             visual.transform.localScale = new Vector3(Thickness, WallHeight, Thickness);
+        }
+
+        private void PositionDoor(GameObject visual, WallEdge edge, float baseHeight)
+        {
+            visual.transform.position = edges.Center(edge, baseHeight, 0f);
+            visual.transform.rotation = Quaternion.identity;
+            Transform lintel = visual.transform.Find("Door Lintel");
+            if (lintel != null)
+            {
+                lintel.localPosition = Vector3.up * (DoorOpeningHeight + (WallHeight - DoorOpeningHeight) * 0.5f);
+                lintel.localRotation = Quaternion.identity;
+                lintel.localScale = edge.AlongX
+                    ? new Vector3(grid.CellSize, WallHeight - DoorOpeningHeight, Thickness)
+                    : new Vector3(Thickness, WallHeight - DoorOpeningHeight, grid.CellSize);
+            }
+
+            PositionDoorOpeningOutline(visual.transform, edge);
+        }
+
+        private void CreateDoorOpeningOutline(GameObject root, WallEdge edge)
+        {
+            CreateDoorOpeningOutlineSide(root.transform, "Door Opening Left");
+            CreateDoorOpeningOutlineSide(root.transform, "Door Opening Right");
+            CreateDoorOpeningOutlineSide(root.transform, "Door Opening Header");
+            PositionDoorOpeningOutline(root.transform, edge);
+        }
+
+        private static void CreateDoorOpeningOutlineSide(Transform parent, string name)
+        {
+            GameObject side = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            side.name = name;
+            side.transform.SetParent(parent, false);
+            side.GetComponent<Collider>().enabled = false;
+        }
+
+        private void PositionDoorOpeningOutline(Transform root, WallEdge edge)
+        {
+            Transform left = root.Find("Door Opening Left");
+            Transform right = root.Find("Door Opening Right");
+            Transform header = root.Find("Door Opening Header");
+            if (left == null || right == null || header == null) return;
+
+            float sideOffset = grid.CellSize * 0.5f - DoorPreviewOutlineThickness * 0.5f;
+            Vector3 scale = edge.AlongX
+                ? new Vector3(DoorPreviewOutlineThickness, DoorOpeningHeight, DoorPreviewOutlineDepth)
+                : new Vector3(DoorPreviewOutlineDepth, DoorOpeningHeight, DoorPreviewOutlineThickness);
+            Vector3 axis = edge.AlongX ? Vector3.right : Vector3.forward;
+            Vector3 height = Vector3.up * (DoorOpeningHeight * 0.5f);
+            left.localPosition = height - axis * sideOffset;
+            right.localPosition = height + axis * sideOffset;
+            left.localRotation = Quaternion.identity;
+            right.localRotation = Quaternion.identity;
+            left.localScale = scale;
+            right.localScale = scale;
+            header.localPosition = Vector3.up * (DoorOpeningHeight - DoorPreviewOutlineThickness * 0.5f);
+            header.localRotation = Quaternion.identity;
+            header.localScale = edge.AlongX
+                ? new Vector3(grid.CellSize, DoorPreviewOutlineThickness, DoorPreviewOutlineDepth)
+                : new Vector3(DoorPreviewOutlineDepth, DoorPreviewOutlineThickness, grid.CellSize);
         }
 
         private static void DestroyVisual(Object visual)
@@ -435,11 +729,14 @@ namespace MaterialCityTycoon.Building
             {
                 if (preview != null) preview.SetActive(false);
             }
+
+            HideDoorPreview();
         }
 
         private void OnDisable() { SetActive(false); }
         private void OnDestroy()
         {
+            if (doorPreviewVisual != null) DestroyVisual(doorPreviewVisual);
             if (wallMaterial != null) Destroy(wallMaterial);
             if (validMaterial != null) Destroy(validMaterial);
             if (invalidMaterial != null) Destroy(invalidMaterial);

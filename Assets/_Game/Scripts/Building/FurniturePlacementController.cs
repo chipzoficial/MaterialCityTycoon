@@ -57,7 +57,9 @@ namespace MaterialCityTycoon.Building
         /// </summary>
         public bool IsPlacementModeActive => placementModeActive;
         public bool IsMovingFurnitureActive => IsMovingFurniture;
-        public bool IsWallModeActive => walls != null && walls.IsActive;
+        public bool IsWallModeActive => walls != null && walls.IsWallToolActive;
+        public bool IsDoorToolActive => walls != null && walls.IsDoorToolActive;
+        public bool IsStructureToolActive => walls != null && walls.IsActive;
         public FurnitureDefinition SelectedFurnitureDefinition => selectedFurnitureDefinition;
 
         public void SetPlacementMode(bool active)
@@ -86,7 +88,22 @@ namespace MaterialCityTycoon.Building
             if (cellPointer != null) cellPointer.RestoreIndicatorMaterial();
             walls.SetCellPointer(cellPointer);
             walls.SetPlacementController(this);
-            walls.SetActive(true);
+            walls.SetWallToolActive(true);
+            return true;
+        }
+
+        public bool SelectDoorTool()
+        {
+            if (!enabled || walls == null || !walls.CanOperate) return false;
+            placementModeActive = true;
+            movingFurniture = null;
+            movingFurnitureRotationQuarterTurns = 0;
+            DestroyPreviewVisual();
+            DisposeCellPreview();
+            if (cellPointer != null) cellPointer.RestoreIndicatorMaterial();
+            walls.SetCellPointer(cellPointer);
+            walls.SetPlacementController(this);
+            walls.SetDoorToolActive(true);
             return true;
         }
 
@@ -96,6 +113,19 @@ namespace MaterialCityTycoon.Building
             result.Clear();
             for (int i = 0; i < furnitureDefinitions.Count; i++)
                 if (TryGetValidFurnitureDefinitionAtIndex(i, out FurnitureDefinition definition)) result.Add(definition);
+        }
+
+        /// <summary>Ensures both cells on an interior doorway remain traversable.</summary>
+        public bool AreDoorwayCellsClear(Vector2Int firstCell, Vector2Int secondCell)
+        {
+            return constructionGrid != null && constructionGrid.IsInside(firstCell) && constructionGrid.IsInside(secondCell)
+                && !occupancyByCell.ContainsKey(firstCell) && !occupancyByCell.ContainsKey(secondCell);
+        }
+
+        /// <summary>Ensures the grid-side cell of an external doorway remains traversable.</summary>
+        public bool IsDoorwayCellClear(Vector2Int cell)
+        {
+            return constructionGrid != null && constructionGrid.IsInside(cell) && !occupancyByCell.ContainsKey(cell);
         }
 
         /// <summary>
@@ -439,10 +469,10 @@ namespace MaterialCityTycoon.Building
                 return;
             }
 
-            if (IsWallModeActive)
+            if (IsStructureToolActive)
             {
                 if (keyboard != null) TrySelectFurnitureDefinitionFromKeyboard(keyboard);
-                if (IsWallModeActive) return;
+                if (IsStructureToolActive) return;
             }
 
             if (!IsMovingFurniture && keyboard != null && keyboard.mKey.wasPressedThisFrame)
@@ -1190,7 +1220,8 @@ namespace MaterialCityTycoon.Building
             {
                 if (!constructionGrid.IsInside(cell)
                     || (occupancyByCell.TryGetValue(cell, out string occupantId)
-                        && occupantId != ignoredFurnitureId))
+                        && occupantId != ignoredFurnitureId)
+                    || (walls != null && (walls.IsDoorwayCell(cell) || walls.IsDiagonalCellBlocked(cell))))
                 {
                     valid = false;
                 }
@@ -1234,6 +1265,7 @@ namespace MaterialCityTycoon.Building
                 {
                     bool blocked = !constructionGrid.IsInside(cell) || proposedFootprint.Contains(cell)
                         || (occupancyByCell.TryGetValue(cell, out string occupantId) && occupantId != ignoredFurnitureId)
+                        || (walls != null && walls.IsDiagonalCellBlocked(cell))
                         || !HasOpenAccessPassage(cell, proposedFootprint, null);
                     if (blocked)
                     {
@@ -1293,6 +1325,32 @@ namespace MaterialCityTycoon.Building
                         furniture.rotationQuarterTurns, definition, footprint, additionalWalls))
                 {
                     return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Diagonals conservatively reserve their crossed cell: they cannot be created through
+        /// furniture and cannot invalidate a configured access cell.
+        /// </summary>
+        public bool AreDiagonalCellsClear(IReadOnlyList<WallEdge> candidates)
+        {
+            if (candidates == null || candidates.Count == 0) return false;
+            foreach (WallEdge edge in candidates)
+            {
+                if (!edge.IsDiagonal) continue;
+                Vector2Int cell = new(edge.X, edge.Z);
+                if (occupancyByCell.ContainsKey(cell)) return false;
+                foreach (PlacedFurnitureState furniture in furnitureById.Values)
+                {
+                    if (!TryGetFurnitureDefinition(furniture, out FurnitureDefinition definition)) return false;
+                    foreach (Vector2Int access in GetAccessCells(furniture.anchorCell, furniture.width,
+                                 furniture.depth, furniture.rotationQuarterTurns, definition))
+                    {
+                        if (access == cell) return false;
+                    }
                 }
             }
 
@@ -1362,6 +1420,12 @@ namespace MaterialCityTycoon.Building
             HashSet<Vector2Int> footprint,
             IReadOnlyList<WallEdge> additionalWalls)
         {
+            if ((walls != null && walls.IsDiagonalCellBlocked(accessCell))
+                || ContainsDiagonalCandidate(accessCell, additionalWalls))
+            {
+                return false;
+            }
+
             foreach (Vector2Int physicalCell in footprint)
             {
                 if (!WallEdges.TryGetSeparatingEdge(physicalCell, accessCell, out WallEdge edge))
@@ -1378,9 +1442,21 @@ namespace MaterialCityTycoon.Building
             return false;
         }
 
+        private static bool ContainsDiagonalCandidate(Vector2Int cell, IReadOnlyList<WallEdge> candidates)
+        {
+            if (candidates == null) return false;
+            for (int index = 0; index < candidates.Count; index++)
+            {
+                WallEdge candidate = candidates[index];
+                if (candidate.IsDiagonal && candidate.X == cell.x && candidate.Z == cell.y) return true;
+            }
+
+            return false;
+        }
+
         private bool IsWallBlockingPassage(WallEdge edge, IReadOnlyList<WallEdge> additionalWalls)
         {
-            if (walls != null && walls.ContainsEdge(edge))
+            if (walls != null && walls.IsPassageBlocked(edge))
             {
                 return true;
             }
