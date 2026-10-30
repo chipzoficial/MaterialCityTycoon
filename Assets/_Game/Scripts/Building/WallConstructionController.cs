@@ -20,11 +20,12 @@ namespace MaterialCityTycoon.Building
         private readonly List<GameObject> previewVisuals = new();
         private readonly List<GameObject> previewJointVisuals = new();
         private readonly List<Vector2Int> affectedJunctions = new();
+        private readonly List<WallEdge> incidentEdges = new();
+        private readonly HashSet<Mesh> junctionMeshes = new();
         private WallEdges edges;
         private Material wallMaterial, validMaterial, invalidMaterial;
         private WallEdge dragStartEdge;
         private Vector2Int dragStartVertex;
-        private Vector3 dragStartGridPoint;
         private Vector2 dragStartScreenPosition;
         private float dragBaseHeight;
         private bool dragging;
@@ -203,7 +204,6 @@ namespace MaterialCityTycoon.Building
                 dragging = true;
                 dragStartEdge = startEdge;
                 dragStartVertex = startVertex;
-                dragStartGridPoint = gridPoint;
                 dragStartScreenPosition = mouse.position.ReadValue();
                 dragBaseHeight = GetGroundSurfaceHeight();
                 dragExceededThreshold = false;
@@ -281,6 +281,7 @@ namespace MaterialCityTycoon.Building
                 }
 
                 doorVisuals[edge] = CreateDoorVisual(edge, baseHeight, wallMaterial);
+                RefreshFinalJunctionVisuals(new[] { edge }, baseHeight);
                 ShowDoorPreview(edge, baseHeight, false);
             }
         }
@@ -314,11 +315,12 @@ namespace MaterialCityTycoon.Building
             }
 
             visuals[edge] = CreateWallVisual(edge, baseHeight, wallMaterial);
+            RefreshFinalJunctionVisuals(new[] { edge }, baseHeight);
         }
 
         private void UpdateDrag(Vector3 gridPoint)
         {
-            if (!edges.TryFindNearestVertex(gridPoint, out Vector2Int endVertex))
+            if (!edges.TryFindNearestVertex(gridPoint, out _))
             {
                 draggedEdges.Clear();
                 dragIsValid = false;
@@ -326,31 +328,10 @@ namespace MaterialCityTycoon.Building
                 return;
             }
 
-            Vector3 worldDelta = gridPoint - dragStartGridPoint;
+            Vector3 dragOrigin = edges.GetVertexPosition(dragStartVertex, gridPoint.y);
+            Vector3 worldDelta = gridPoint - dragOrigin;
             WallEdgeOrientation orientation = WallEdges.GetSnappedOrientation(new Vector2(worldDelta.x, worldDelta.z));
-            if (orientation == WallEdgeOrientation.DiagonalAscending || orientation == WallEdgeOrientation.DiagonalDescending)
-            {
-                bool ascending = orientation == WallEdgeOrientation.DiagonalAscending;
-                if (!edges.TryFindNearestDiagonal(dragStartGridPoint, ascending, out WallEdge diagonalStart)
-                    || !edges.TryFindNearestDiagonal(gridPoint, ascending, out WallEdge diagonalEnd)
-                    || !edges.GetDiagonalLineFromDirection(diagonalStart, new Vector2Int(diagonalEnd.X, diagonalEnd.Z), draggedEdges))
-                {
-                    draggedEdges.Clear();
-                }
-            }
-            else
-            {
-                if (dragStartEdge.Orientation == orientation)
-                {
-                    // Preserve the initially highlighted edge when the drag keeps its axis.
-                    edges.GetStraightLineFromEdge(dragStartEdge, dragStartVertex, endVertex, draggedEdges);
-                }
-                else
-                {
-                    edges.GetOrthogonalLine(dragStartVertex, endVertex,
-                        orientation == WallEdgeOrientation.AlongX, draggedEdges);
-                }
-            }
+            edges.GetLineFromDirection(dragStartVertex, gridPoint, orientation, draggedEdges);
             if (draggedEdges.Count == 0)
             {
                 dragIsValid = false;
@@ -518,19 +499,18 @@ namespace MaterialCityTycoon.Building
 
         private void RefreshFinalJunctionVisuals(IReadOnlyList<WallEdge> affectedEdges, float fallbackBaseHeight)
         {
+            HashSet<Vector2Int> refreshedVertices = new();
             foreach (WallEdge edge in affectedEdges)
             {
-                if (edge.IsDiagonal) continue;
-                RefreshFinalJunctionVisual(new Vector2Int(edge.X, edge.Z), fallbackBaseHeight);
-                RefreshFinalJunctionVisual(edge.AlongX
-                    ? new Vector2Int(edge.X + 1, edge.Z)
-                    : new Vector2Int(edge.X, edge.Z + 1), fallbackBaseHeight);
+                WallEdges.GetGridEndpoints(edge, out Vector2Int start, out Vector2Int end);
+                if (refreshedVertices.Add(start)) RefreshFinalJunctionVisual(start, fallbackBaseHeight);
+                if (refreshedVertices.Add(end)) RefreshFinalJunctionVisual(end, fallbackBaseHeight);
             }
         }
 
         private void RefreshFinalJunctionVisual(Vector2Int vertex, float fallbackBaseHeight)
         {
-            if (edges.GetConnectionCountAtVertex(vertex) < 2)
+            if (!ShouldCreateJunctionConnector(vertex, null))
             {
                 if (jointVisuals.TryGetValue(vertex, out GameObject obsolete))
                 {
@@ -547,18 +527,14 @@ namespace MaterialCityTycoon.Building
             }
             else
             {
-                PositionJoint(joint, vertex, baseHeight);
+                PositionJoint(joint, vertex, baseHeight, null);
             }
         }
 
         private float GetJunctionBaseHeight(Vector2Int vertex, float fallback)
         {
-            WallEdge[] incident =
-            {
-                new WallEdge(vertex.x - 1, vertex.y, true), new WallEdge(vertex.x, vertex.y, true),
-                new WallEdge(vertex.x, vertex.y - 1, false), new WallEdge(vertex.x, vertex.y, false)
-            };
-            foreach (WallEdge edge in incident)
+            edges.GetIncidentEdgesAtVertex(vertex, null, incidentEdges);
+            foreach (WallEdge edge in incidentEdges)
             {
                 if (visuals.TryGetValue(edge, out GameObject visual) && visual != null)
                 {
@@ -569,18 +545,44 @@ namespace MaterialCityTycoon.Building
             return fallback;
         }
 
+        private bool ShouldCreateJunctionConnector(Vector2Int vertex, IReadOnlyList<WallEdge> candidates)
+        {
+            if (edges.GetConnectionCountAtVertex(vertex, candidates) < 3) return false;
+
+            edges.GetIncidentEdgesAtVertex(vertex, candidates, incidentEdges);
+            foreach (WallEdge edge in incidentEdges)
+            {
+                if (edges.IsDoor(edge)) return false;
+            }
+
+            return true;
+        }
+
         private void ShowPreviewJunctionVisuals(IReadOnlyList<WallEdge> candidates, float baseHeight, Material material)
         {
-            edges.GetAffectedJunctionVertices(candidates, affectedJunctions);
-            for (int index = 0; index < affectedJunctions.Count; index++)
+            foreach (GameObject finalJoint in jointVisuals.Values)
             {
-                GameObject joint = GetPreviewJointVisual(index);
-                PositionJoint(joint, affectedJunctions[index], baseHeight);
+                if (finalJoint != null) finalJoint.SetActive(true);
+            }
+
+            edges.GetAffectedJunctionVertices(candidates, affectedJunctions);
+            int previewIndex = 0;
+            foreach (Vector2Int vertex in affectedJunctions)
+            {
+                if (!ShouldCreateJunctionConnector(vertex, candidates)) continue;
+
+                if (jointVisuals.TryGetValue(vertex, out GameObject finalJoint))
+                {
+                    finalJoint.SetActive(false);
+                }
+
+                GameObject joint = GetPreviewJointVisual(previewIndex++);
+                PositionJoint(joint, vertex, baseHeight, candidates);
                 joint.GetComponent<Renderer>().sharedMaterial = material;
                 joint.SetActive(true);
             }
 
-            for (int index = affectedJunctions.Count; index < previewJointVisuals.Count; index++) previewJointVisuals[index].SetActive(false);
+            for (int index = previewIndex; index < previewJointVisuals.Count; index++) previewJointVisuals[index].SetActive(false);
         }
 
         private GameObject GetPreviewJointVisual(int index)
@@ -597,12 +599,16 @@ namespace MaterialCityTycoon.Building
 
         private GameObject CreateWallJointVisual(Vector2Int vertex, float baseHeight, Material material, string name = "Wall Joint", bool isPreview = false)
         {
-            GameObject visual = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            visual.name = name;
+            GameObject visual = new(name);
             visual.transform.SetParent(transform, false);
-            visual.GetComponent<Collider>().enabled = !isPreview;
-            visual.GetComponent<Renderer>().sharedMaterial = material;
-            PositionJoint(visual, vertex, baseHeight);
+            visual.AddComponent<MeshFilter>();
+            MeshRenderer renderer = visual.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            if (!isPreview)
+            {
+                visual.AddComponent<MeshCollider>();
+            }
+            PositionJoint(visual, vertex, baseHeight, null);
             return visual;
         }
 
@@ -624,23 +630,151 @@ namespace MaterialCityTycoon.Building
 
         private void Position(GameObject visual, WallEdge edge, float baseHeight)
         {
-            visual.transform.position = edges.Center(edge, baseHeight, WallHeight);
-            if (edge.IsDiagonal)
-            {
-                visual.transform.rotation = Quaternion.Euler(0f, edge.IsAscendingDiagonal ? 45f : -45f, 0f);
-                visual.transform.localScale = new Vector3(Mathf.Sqrt(2f) * grid.CellSize, WallHeight, Thickness);
-                return;
-            }
-
-            visual.transform.rotation = Quaternion.identity;
-            visual.transform.localScale = edge.AlongX ? new Vector3(grid.CellSize, WallHeight, Thickness) : new Vector3(Thickness, WallHeight, grid.CellSize);
+            edges.GetEndpoints(edge, baseHeight, out Vector3 start, out Vector3 end);
+            Vector3 direction = end - start;
+            float length = new Vector2(direction.x, direction.z).magnitude;
+            visual.transform.position = (start + end) * 0.5f + Vector3.up * (WallHeight * 0.5f);
+            visual.transform.rotation = Quaternion.FromToRotation(Vector3.right, direction.normalized);
+            visual.transform.localScale = new Vector3(length, WallHeight, Thickness);
         }
 
-        private void PositionJoint(GameObject visual, Vector2Int vertex, float baseHeight)
+        private void PositionJoint(GameObject visual, Vector2Int vertex, float baseHeight, IReadOnlyList<WallEdge> candidates)
         {
-            visual.transform.position = edges.GetVertexPosition(vertex, baseHeight) + Vector3.up * (WallHeight * 0.5f);
+            Vector3 position = edges.GetVertexPosition(vertex, baseHeight);
+            visual.transform.position = position + Vector3.up * (WallHeight * 0.5f);
             visual.transform.rotation = Quaternion.identity;
-            visual.transform.localScale = new Vector3(Thickness, WallHeight, Thickness);
+            visual.transform.localScale = Vector3.one;
+
+            Mesh mesh = CreateJunctionMesh(vertex, candidates);
+            MeshFilter filter = visual.GetComponent<MeshFilter>();
+            MeshCollider collider = visual.GetComponent<MeshCollider>();
+            if (filter.sharedMesh != null) DestroyJunctionMesh(filter.sharedMesh);
+            filter.sharedMesh = mesh;
+            if (collider != null) collider.sharedMesh = mesh;
+        }
+
+        private Mesh CreateJunctionMesh(Vector2Int vertex, IReadOnlyList<WallEdge> candidates)
+        {
+            edges.GetIncidentEdgesAtVertex(vertex, candidates, incidentEdges);
+            Vector3 worldVertex = edges.GetVertexPosition(vertex, 0f);
+            List<Vector2> footprint = new(incidentEdges.Count * 2);
+            foreach (WallEdge edge in incidentEdges)
+            {
+                edges.GetEndpoints(edge, 0f, out Vector3 start, out Vector3 end);
+                WallEdges.GetGridEndpoints(edge, out Vector2Int startVertex, out _);
+                Vector3 other = startVertex == vertex ? end : start;
+                Vector2 direction = new(other.x - worldVertex.x, other.z - worldVertex.z);
+                direction.Normalize();
+                Vector2 normal = new Vector2(-direction.y, direction.x) * (Thickness * 0.5f);
+                footprint.Add(normal);
+                footprint.Add(-normal);
+            }
+
+            if (footprint.Count < 3)
+            {
+                float halfThickness = Thickness * 0.5f;
+                footprint.Clear();
+                footprint.Add(new Vector2(-halfThickness, -halfThickness));
+                footprint.Add(new Vector2(-halfThickness, halfThickness));
+                footprint.Add(new Vector2(halfThickness, -halfThickness));
+                footprint.Add(new Vector2(halfThickness, halfThickness));
+            }
+
+            List<Vector2> hull = GetConvexHull(footprint);
+            Mesh mesh = new()
+            {
+                name = "Wall Junction Mesh"
+            };
+            junctionMeshes.Add(mesh);
+
+            int count = hull.Count;
+            Vector3[] vertices = new Vector3[count * 2];
+            for (int index = 0; index < count; index++)
+            {
+                vertices[index] = new Vector3(hull[index].x, -WallHeight * 0.5f, hull[index].y);
+                vertices[count + index] = new Vector3(hull[index].x, WallHeight * 0.5f, hull[index].y);
+            }
+
+            List<int> triangles = new((count - 2) * 6 + count * 6);
+            for (int index = 1; index < count - 1; index++)
+            {
+                triangles.Add(0);
+                triangles.Add(index);
+                triangles.Add(index + 1);
+                triangles.Add(count);
+                triangles.Add(count + index + 1);
+                triangles.Add(count + index);
+            }
+
+            for (int index = 0; index < count; index++)
+            {
+                int next = (index + 1) % count;
+                triangles.Add(index);
+                triangles.Add(count + index);
+                triangles.Add(count + next);
+                triangles.Add(index);
+                triangles.Add(count + next);
+                triangles.Add(next);
+            }
+
+            mesh.vertices = vertices;
+            mesh.triangles = triangles.ToArray();
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        private static List<Vector2> GetConvexHull(List<Vector2> points)
+        {
+            points.Sort((first, second) =>
+            {
+                int xComparison = first.x.CompareTo(second.x);
+                return xComparison != 0 ? xComparison : first.y.CompareTo(second.y);
+            });
+
+            List<Vector2> unique = new(points.Count);
+            foreach (Vector2 point in points)
+            {
+                if (unique.Count == 0 || (unique[unique.Count - 1] - point).sqrMagnitude > 0.00000001f)
+                {
+                    unique.Add(point);
+                }
+            }
+
+            if (unique.Count <= 2) return unique;
+
+            List<Vector2> hull = new(unique.Count * 2);
+            foreach (Vector2 point in unique)
+            {
+                while (hull.Count >= 2 && Cross(hull[hull.Count - 1] - hull[hull.Count - 2], point - hull[hull.Count - 1]) <= 0f)
+                {
+                    hull.RemoveAt(hull.Count - 1);
+                }
+                hull.Add(point);
+            }
+
+            int lowerCount = hull.Count;
+            for (int index = unique.Count - 2; index >= 0; index--)
+            {
+                Vector2 point = unique[index];
+                while (hull.Count > lowerCount && Cross(hull[hull.Count - 1] - hull[hull.Count - 2], point - hull[hull.Count - 1]) <= 0f)
+                {
+                    hull.RemoveAt(hull.Count - 1);
+                }
+                hull.Add(point);
+            }
+            hull.RemoveAt(hull.Count - 1);
+            return hull;
+        }
+
+        private static float Cross(Vector2 first, Vector2 second)
+        {
+            return first.x * second.y - first.y * second.x;
+        }
+
+        private void DestroyJunctionMesh(Mesh mesh)
+        {
+            if (mesh != null && junctionMeshes.Remove(mesh)) DestroyVisual(mesh);
         }
 
         private void PositionDoor(GameObject visual, WallEdge edge, float baseHeight)
@@ -728,6 +862,11 @@ namespace MaterialCityTycoon.Building
             foreach (GameObject preview in previewJointVisuals)
             {
                 if (preview != null) preview.SetActive(false);
+            }
+
+            foreach (GameObject finalJoint in jointVisuals.Values)
+            {
+                if (finalJoint != null) finalJoint.SetActive(true);
             }
 
             HideDoorPreview();

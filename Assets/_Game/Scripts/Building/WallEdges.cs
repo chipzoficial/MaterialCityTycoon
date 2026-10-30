@@ -125,20 +125,46 @@ namespace MaterialCityTycoon.Building
         /// </summary>
         public int GetConnectionCountAtVertex(Vector2Int vertex, IReadOnlyList<WallEdge> candidates = null)
         {
-            int count = 0;
-            CountIfPresent(new WallEdge(vertex.x - 1, vertex.y, true));
-            CountIfPresent(new WallEdge(vertex.x, vertex.y, true));
-            CountIfPresent(new WallEdge(vertex.x, vertex.y - 1, false));
-            CountIfPresent(new WallEdge(vertex.x, vertex.y, false));
-            return count;
+            return (IsIncidentEdgePresent(new WallEdge(vertex.x - 1, vertex.y, WallEdgeOrientation.AlongX), candidates) ? 1 : 0)
+                + (IsIncidentEdgePresent(new WallEdge(vertex.x, vertex.y, WallEdgeOrientation.AlongX), candidates) ? 1 : 0)
+                + (IsIncidentEdgePresent(new WallEdge(vertex.x, vertex.y - 1, WallEdgeOrientation.AlongZ), candidates) ? 1 : 0)
+                + (IsIncidentEdgePresent(new WallEdge(vertex.x, vertex.y, WallEdgeOrientation.AlongZ), candidates) ? 1 : 0)
+                + (IsIncidentEdgePresent(new WallEdge(vertex.x - 1, vertex.y - 1, WallEdgeOrientation.DiagonalAscending), candidates) ? 1 : 0)
+                + (IsIncidentEdgePresent(new WallEdge(vertex.x, vertex.y, WallEdgeOrientation.DiagonalAscending), candidates) ? 1 : 0)
+                + (IsIncidentEdgePresent(new WallEdge(vertex.x - 1, vertex.y, WallEdgeOrientation.DiagonalDescending), candidates) ? 1 : 0)
+                + (IsIncidentEdgePresent(new WallEdge(vertex.x, vertex.y - 1, WallEdgeOrientation.DiagonalDescending), candidates) ? 1 : 0);
+        }
 
-            void CountIfPresent(WallEdge edge)
+        public void GetIncidentEdgesAtVertex(
+            Vector2Int vertex, IReadOnlyList<WallEdge> candidates, List<WallEdge> result)
+        {
+            if (result == null) throw new ArgumentNullException(nameof(result));
+
+            result.Clear();
+            WallEdge[] possibleEdges =
             {
-                if (IsInside(edge) && (Contains(edge) || IncludesCandidate(candidates, edge)))
+                new(vertex.x - 1, vertex.y, WallEdgeOrientation.AlongX),
+                new(vertex.x, vertex.y, WallEdgeOrientation.AlongX),
+                new(vertex.x, vertex.y - 1, WallEdgeOrientation.AlongZ),
+                new(vertex.x, vertex.y, WallEdgeOrientation.AlongZ),
+                new(vertex.x - 1, vertex.y - 1, WallEdgeOrientation.DiagonalAscending),
+                new(vertex.x, vertex.y, WallEdgeOrientation.DiagonalAscending),
+                new(vertex.x - 1, vertex.y, WallEdgeOrientation.DiagonalDescending),
+                new(vertex.x, vertex.y - 1, WallEdgeOrientation.DiagonalDescending)
+            };
+
+            foreach (WallEdge edge in possibleEdges)
+            {
+                if (IsIncidentEdgePresent(edge, candidates))
                 {
-                    count++;
+                    result.Add(edge);
                 }
             }
+        }
+
+        private bool IsIncidentEdgePresent(WallEdge edge, IReadOnlyList<WallEdge> candidates)
+        {
+            return IsInside(edge) && (Contains(edge) || IncludesCandidate(candidates, edge));
         }
 
         private static bool IncludesCandidate(IReadOnlyList<WallEdge> candidates, WallEdge edge)
@@ -162,9 +188,9 @@ namespace MaterialCityTycoon.Building
             HashSet<Vector2Int> endpoints = new();
             foreach (WallEdge edge in candidates)
             {
-                if (edge.IsDiagonal) continue;
-                endpoints.Add(new Vector2Int(edge.X, edge.Z));
-                endpoints.Add(edge.AlongX ? new Vector2Int(edge.X + 1, edge.Z) : new Vector2Int(edge.X, edge.Z + 1));
+                GetGridEndpoints(edge, out Vector2Int start, out Vector2Int end);
+                endpoints.Add(start);
+                endpoints.Add(end);
             }
 
             foreach (Vector2Int endpoint in endpoints)
@@ -325,6 +351,62 @@ namespace MaterialCityTycoon.Building
             }
         }
 
+        /// <summary>Builds a grid-aligned line from a logical start vertex toward a world point.</summary>
+        public void GetLineFromDirection(Vector2Int startVertex, Vector3 worldPoint, WallEdgeOrientation orientation, List<WallEdge> result)
+        {
+            if (result == null) throw new ArgumentNullException(nameof(result));
+            result.Clear();
+
+            Vector3 start = GetVertexPosition(startVertex, 0f);
+            float deltaX = worldPoint.x - start.x;
+            float deltaZ = worldPoint.z - start.z;
+            int stepX = deltaX >= 0f ? 1 : -1;
+            int stepZ = deltaZ >= 0f ? 1 : -1;
+            int count;
+
+            switch (orientation)
+            {
+                case WallEdgeOrientation.AlongX:
+                    if (Mathf.Abs(deltaX) <= Mathf.Epsilon) return;
+                    count = Mathf.RoundToInt(Mathf.Abs(deltaX) / grid.CellSize);
+                    for (int index = 0; index < count; index++)
+                    {
+                        int edgeX = stepX > 0 ? startVertex.x + index : startVertex.x - index - 1;
+                        result.Add(new WallEdge(edgeX, startVertex.y, true));
+                    }
+                    return;
+
+                case WallEdgeOrientation.AlongZ:
+                    if (Mathf.Abs(deltaZ) <= Mathf.Epsilon) return;
+                    count = Mathf.RoundToInt(Mathf.Abs(deltaZ) / grid.CellSize);
+                    for (int index = 0; index < count; index++)
+                    {
+                        int edgeZ = stepZ > 0 ? startVertex.y + index : startVertex.y - index - 1;
+                        result.Add(new WallEdge(startVertex.x, edgeZ, false));
+                    }
+                    return;
+
+                case WallEdgeOrientation.DiagonalAscending:
+                case WallEdgeOrientation.DiagonalDescending:
+                    if (Mathf.Abs(deltaX) <= Mathf.Epsilon || Mathf.Abs(deltaZ) <= Mathf.Epsilon) return;
+                    stepZ = orientation == WallEdgeOrientation.DiagonalAscending ? stepX : -stepX;
+                    count = Mathf.RoundToInt((deltaX * stepX + deltaZ * stepZ) / (2f * grid.CellSize));
+                    for (int index = 0; index < count; index++)
+                    {
+                        int firstX = startVertex.x + index * stepX;
+                        int firstZ = startVertex.y + index * stepZ;
+                        result.Add(new WallEdge(
+                            Mathf.Min(firstX, firstX + stepX),
+                            Mathf.Min(firstZ, firstZ + stepZ),
+                            orientation));
+                    }
+                    return;
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(orientation), orientation, null);
+            }
+        }
+
         /// <summary>Writes a contiguous 45 degree line of same-oriented diagonal segments.</summary>
         public bool GetDiagonalLine(WallEdge startEdge, Vector2Int endCell, List<WallEdge> result)
         {
@@ -472,21 +554,42 @@ namespace MaterialCityTycoon.Building
 
         public Vector3 Center(WallEdge edge, float baseHeight, float wallHeight)
         {
-            if (edge.IsDiagonal)
-            {
-                Vector3 cellCenter = grid.GetCellCenter(new Vector2Int(edge.X, edge.Z), baseHeight);
-                return cellCenter + Vector3.up * (wallHeight * 0.5f);
-            }
-
-            Vector3 vertex = GetVertexPosition(new Vector2Int(edge.X, edge.Z), baseHeight);
-            return new Vector3(vertex.x + (edge.AlongX ? 0.5f : 0f) * grid.CellSize,
-                baseHeight + wallHeight * 0.5f, vertex.z + (edge.AlongX ? 0f : 0.5f) * grid.CellSize);
+            GetEndpoints(edge, baseHeight, out Vector3 start, out Vector3 end);
+            return (start + end) * 0.5f + Vector3.up * (wallHeight * 0.5f);
         }
 
         public Vector3 GetVertexPosition(Vector2Int vertex, float baseHeight)
         {
             Vector3 min = grid.GetCellCenter(Vector2Int.zero, 0f) - new Vector3(grid.CellSize * 0.5f, 0f, grid.CellSize * 0.5f);
             return new Vector3(min.x + vertex.x * grid.CellSize, baseHeight, min.z + vertex.y * grid.CellSize);
+        }
+
+        public void GetEndpoints(WallEdge edge, float baseHeight, out Vector3 start, out Vector3 end)
+        {
+            GetGridEndpoints(edge, out Vector2Int startVertex, out Vector2Int endVertex);
+            start = GetVertexPosition(startVertex, baseHeight);
+            end = GetVertexPosition(endVertex, baseHeight);
+        }
+
+        public static void GetGridEndpoints(WallEdge edge, out Vector2Int start, out Vector2Int end)
+        {
+            if (edge.IsAscendingDiagonal)
+            {
+                start = new Vector2Int(edge.X, edge.Z);
+                end = new Vector2Int(edge.X + 1, edge.Z + 1);
+            }
+            else if (edge.Orientation == WallEdgeOrientation.DiagonalDescending)
+            {
+                start = new Vector2Int(edge.X, edge.Z + 1);
+                end = new Vector2Int(edge.X + 1, edge.Z);
+            }
+            else
+            {
+                start = new Vector2Int(edge.X, edge.Z);
+                end = edge.AlongX
+                    ? new Vector2Int(edge.X + 1, edge.Z)
+                    : new Vector2Int(edge.X, edge.Z + 1);
+            }
         }
 
         private bool TryGetCell(Vector3 point, out Vector2Int cell)
@@ -501,10 +604,7 @@ namespace MaterialCityTycoon.Building
 
         private void GetEndpoints(WallEdge edge, out Vector3 start, out Vector3 end)
         {
-            start = GetVertexPosition(new Vector2Int(edge.X, edge.Z), 0f);
-            if (edge.IsAscendingDiagonal) end = GetVertexPosition(new Vector2Int(edge.X + 1, edge.Z + 1), 0f);
-            else if (edge.IsDiagonal) { start = GetVertexPosition(new Vector2Int(edge.X, edge.Z + 1), 0f); end = GetVertexPosition(new Vector2Int(edge.X + 1, edge.Z), 0f); }
-            else end = GetVertexPosition(edge.AlongX ? new Vector2Int(edge.X + 1, edge.Z) : new Vector2Int(edge.X, edge.Z + 1), 0f);
+            GetEndpoints(edge, 0f, out start, out end);
         }
 
         private static float DistanceToSegmentSquared(Vector2 point, Vector2 start, Vector2 end)
