@@ -19,6 +19,7 @@ namespace MaterialCityTycoon.Building
         [SerializeField] private ConstructionGrid constructionGrid;
         [SerializeField] private GridCellPointer cellPointer;
         [SerializeField] private WallConstructionController walls;
+        [SerializeField] private FloorConstructionController floors;
 
         [Header("Furniture Definitions")]
         [SerializeField] private List<FurnitureDefinition> furnitureDefinitions = new();
@@ -59,7 +60,8 @@ namespace MaterialCityTycoon.Building
         public bool IsMovingFurnitureActive => IsMovingFurniture;
         public bool IsWallModeActive => walls != null && walls.IsWallToolActive;
         public bool IsDoorToolActive => walls != null && walls.IsDoorToolActive;
-        public bool IsStructureToolActive => walls != null && walls.IsActive;
+        public bool IsFloorToolActive => floors != null && floors.IsActive;
+        public bool IsStructureToolActive => (walls != null && walls.IsActive) || IsFloorToolActive;
         public FurnitureDefinition SelectedFurnitureDefinition => selectedFurnitureDefinition;
 
         public void SetPlacementMode(bool active)
@@ -86,6 +88,7 @@ namespace MaterialCityTycoon.Building
             DestroyPreviewVisual();
             DisposeCellPreview();
             if (cellPointer != null) cellPointer.RestoreIndicatorMaterial();
+            if (floors != null) floors.SetActive(false);
             walls.SetCellPointer(cellPointer);
             walls.SetPlacementController(this);
             walls.SetWallToolActive(true);
@@ -101,9 +104,25 @@ namespace MaterialCityTycoon.Building
             DestroyPreviewVisual();
             DisposeCellPreview();
             if (cellPointer != null) cellPointer.RestoreIndicatorMaterial();
+            if (floors != null) floors.SetActive(false);
             walls.SetCellPointer(cellPointer);
             walls.SetPlacementController(this);
             walls.SetDoorToolActive(true);
+            return true;
+        }
+
+        public bool SelectFloorTool()
+        {
+            if (!enabled || floors == null || !floors.CanOperate) return false;
+            placementModeActive = true;
+            movingFurniture = null;
+            movingFurnitureRotationQuarterTurns = 0;
+            DestroyPreviewVisual();
+            DisposeCellPreview();
+            if (cellPointer != null) cellPointer.RestoreIndicatorMaterial();
+            if (walls != null) walls.SetActive(false);
+            floors.SetCellPointer(cellPointer);
+            floors.SetActive(true);
             return true;
         }
 
@@ -366,8 +385,10 @@ namespace MaterialCityTycoon.Building
                 return false;
             }
 
-            int capacity = furnitureDefinition.FurnitureTypeId == FurnitureTypeIds.CommercialShelf
-                && productDefinition.ProductId == "argamassa"
+            // Capacity belongs to the physical display slot, not to a particular product id.
+            // A zero capacity remains the existing "not configured" value, which the slot
+            // inventory interprets as unrestricted until a physical capacity is defined.
+            int capacity = slotDefinition.HasConfiguredCapacity
                 ? slotDefinition.CapacityUnits
                 : 0;
             return displaySlotInventory.TryTransferFromReserve(
@@ -397,7 +418,7 @@ namespace MaterialCityTycoon.Building
         public bool TryRestockFromStorage(string storageId, string levelId, string furnitureId, string slotId,
             ProductDefinition product, int units)
         {
-            if (product == null || product.ProductId != "argamassa"
+            if (product == null || !product.IsValid(out _)
                 || !TryGetFurnitureStorageLocation(storageId, out _)
                 || !TryGetPlacedFurnitureDefinition(furnitureId, out FurnitureDefinition furniture)
                 || furniture.FurnitureTypeId != FurnitureTypeIds.CommercialShelf
@@ -547,6 +568,7 @@ namespace MaterialCityTycoon.Building
         {
             placementModeActive = false;
             if (walls != null) walls.SetActive(false);
+            if (floors != null) floors.SetActive(false);
             CancelFurnitureMove();
             cellPointer.RestoreIndicatorMaterial();
 
@@ -690,6 +712,10 @@ namespace MaterialCityTycoon.Building
             else if (furniture.typeId == FurnitureTypeIds.IndustrialStorageShelf && definition.StorageCapacity != null)
             {
                 visual.AddComponent<IndustrialStorageVisualPresenter>().Initialize(ShelfInventory, furniture.id, definition.StorageCapacity);
+            }
+            else if (definition.DisplaySlots.Count > 0)
+            {
+                visual.AddComponent<DisplaySlotProductVisualPresenter>().Initialize(this, furniture.id, definition);
             }
 
             return true;
@@ -868,6 +894,7 @@ namespace MaterialCityTycoon.Building
             }
 
             if (walls != null) walls.SetActive(false);
+            if (floors != null) floors.SetActive(false);
 
             selectedFurnitureDefinition = definition;
             if (placementModeActive)

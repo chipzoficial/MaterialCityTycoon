@@ -19,8 +19,9 @@ namespace MaterialCityTycoon.EditorTools
             var placements = Resources.FindObjectsOfTypeAll<FurniturePlacementController>().Where(x => x.gameObject.scene == scene).ToArray();
             var huds = Resources.FindObjectsOfTypeAll<BuildHud>().Where(x => x.gameObject.scene == scene).ToArray();
             var walls = Resources.FindObjectsOfTypeAll<WallConstructionController>().Where(x => x.gameObject.scene == scene).ToArray();
-            if (placements.Length != 1 || huds.Length != 1 || walls.Length > 1)
-            { Debug.LogError("Expected one placement controller, one Build HUD, and at most one wall controller."); return; }
+            var floors = Resources.FindObjectsOfTypeAll<FloorConstructionController>().Where(x => x.gameObject.scene == scene).ToArray();
+            if (placements.Length != 1 || huds.Length != 1 || walls.Length > 1 || floors.Length > 1)
+            { Debug.LogError("Expected one placement controller, one Build HUD, and at most one wall and floor controller."); return; }
             SerializedObject placement = new(placements[0]), hud = new(huds[0]);
             var grid = placement.FindProperty("constructionGrid").objectReferenceValue as ConstructionGrid;
             var pointer = placement.FindProperty("cellPointer").objectReferenceValue as GridCellPointer;
@@ -38,11 +39,13 @@ namespace MaterialCityTycoon.EditorTools
             Transform diagonalAscendingExisting = catalog.transform.Find("DiagonalAscendingButton");
             Transform diagonalDescendingExisting = catalog.transform.Find("DiagonalDescendingButton");
             Transform doorExisting = catalog.transform.Find("DoorButton");
+            Transform floorExisting = catalog.transform.Find("FloorButton");
             if ((categoryExisting != null && categoryExisting.GetComponent<Button>() == null)
                 || (wallExisting != null && wallExisting.GetComponent<Button>() == null)
                 || (diagonalAscendingExisting != null && diagonalAscendingExisting.GetComponent<Button>() == null)
                 || (diagonalDescendingExisting != null && diagonalDescendingExisting.GetComponent<Button>() == null)
-                || (doorExisting != null && doorExisting.GetComponent<Button>() == null))
+                || (doorExisting != null && doorExisting.GetComponent<Button>() == null)
+                || (floorExisting != null && floorExisting.GetComponent<Button>() == null))
             { Debug.LogError("A conflicting structure button object exists."); return; }
             WallConstructionController controller;
             if (walls.Length == 0)
@@ -59,17 +62,36 @@ namespace MaterialCityTycoon.EditorTools
             data.FindProperty("ground").objectReferenceValue = ground;
             data.FindProperty("inputCamera").objectReferenceValue = camera;
             data.ApplyModifiedProperties();
+            FloorConstructionController floorController;
+            if (floors.Length == 0)
+            {
+                GameObject obj = new("FloorConstruction");
+                Undo.RegisterCreatedObjectUndo(obj, "Create floor construction");
+                SceneManager.MoveGameObjectToScene(obj, scene);
+                floorController = Undo.AddComponent<FloorConstructionController>(obj);
+            }
+            else floorController = floors[0];
+            Undo.RecordObject(floorController, "Configure floors");
+            SerializedObject floorData = new(floorController);
+            floorData.FindProperty("grid").objectReferenceValue = grid;
+            floorData.FindProperty("ground").objectReferenceValue = ground;
+            floorData.FindProperty("inputCamera").objectReferenceValue = camera;
+            floorData.FindProperty("cellPointer").objectReferenceValue = pointer;
+            floorData.ApplyModifiedProperties();
             Undo.RecordObject(placements[0], "Configure walls");
             placement.FindProperty("walls").objectReferenceValue = controller;
+            placement.FindProperty("floors").objectReferenceValue = floorController;
             placement.ApplyModifiedProperties();
             Button structure = categoryExisting != null ? categoryExisting.GetComponent<Button>() : CreateButton("StructureCategory", catalog.transform, font, "Estrutura");
             Button wall = wallExisting != null ? wallExisting.GetComponent<Button>() : CreateButton("WallButton", catalog.transform, font, "Parede");
             Button door = doorExisting != null ? doorExisting.GetComponent<Button>() : CreateButton("DoorButton", catalog.transform, font, "Porta");
+            Button floor = floorExisting != null ? floorExisting.GetComponent<Button>() : CreateButton("FloorButton", catalog.transform, font, "Piso");
             SetRect(display.GetComponent<RectTransform>(), new Vector2(18, 218), new Vector2(105, 44));
             SetRect(storage.GetComponent<RectTransform>(), new Vector2(130, 218), new Vector2(105, 44));
             SetRect(structure.GetComponent<RectTransform>(), new Vector2(242, 218), new Vector2(108, 44));
             SetRect(wall.GetComponent<RectTransform>(), new Vector2(18, 159), new Vector2(160, 44));
             SetRect(door.GetComponent<RectTransform>(), new Vector2(190, 159), new Vector2(160, 44));
+            SetRect(floor.GetComponent<RectTransform>(), new Vector2(18, 108), new Vector2(160, 44));
             SetObsoleteButtonInactive(diagonalAscendingExisting);
             SetObsoleteButtonInactive(diagonalDescendingExisting);
             // Existing category icons take too much horizontal space in the compact three-tab row.
@@ -84,9 +106,10 @@ namespace MaterialCityTycoon.EditorTools
             hud.FindProperty("structureCategoryButton").objectReferenceValue = structure;
             hud.FindProperty("wallButton").objectReferenceValue = wall;
             hud.FindProperty("doorButton").objectReferenceValue = door;
+            hud.FindProperty("floorButton").objectReferenceValue = floor;
             hud.ApplyModifiedProperties();
             EditorSceneManager.MarkSceneDirty(scene);
-            Debug.Log("Walls configured. Save Store manually.", controller);
+            Debug.Log("Walls and floors configured. Save Store manually.", controller);
         }
 
         private static Button CreateButton(string name, Transform parent, Font font, string label)

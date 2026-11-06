@@ -16,17 +16,20 @@ namespace MaterialCityTycoon.Building
         [SerializeField] private Button structureCategoryButton;
         [SerializeField] private Button wallButton;
         [SerializeField] private Button doorButton;
+        [SerializeField] private Button floorButton;
         [SerializeField] private Button[] furnitureButtons;
         [SerializeField] private Shader iconShader;
         private Material iconMaterial;
         private readonly List<FurnitureDefinition> definitions = new();
-        private readonly FurnitureDefinition[] items = new FurnitureDefinition[4];
+        private readonly FurnitureDefinition[] items = new FurnitureDefinition[6];
         private static readonly string[] Ids =
         {
             FurnitureTypeIds.CommercialShelf,
             FurnitureTypeIds.ToolDisplay,
             FurnitureTypeIds.PartsBinRack,
-            FurnitureTypeIds.IndustrialStorageShelf
+            FurnitureTypeIds.IndustrialStorageShelf,
+            FurnitureTypeIds.PalletBagDisplay,
+            FurnitureTypeIds.DoubleSidedGondola
         };
         private static readonly Color Normal = new(1f, 1f, 1f, 0.02f);
         private static readonly Color Selected = new(0.87f, 0.34f, 0.08f, 1f);
@@ -37,12 +40,13 @@ namespace MaterialCityTycoon.Building
         private bool previousMoving;
         private bool previousWall;
         private bool previousDoor;
+        private bool previousFloor;
 
         private void Awake()
         {
             if (placement == null || catalog == null || buildButton == null || closeButton == null
                 || displayCategoryButton == null || storageCategoryButton == null || furnitureButtons == null
-                || furnitureButtons.Length != 4 || System.Array.Exists(furnitureButtons, button => button == null))
+                || furnitureButtons.Length != 6 || System.Array.Exists(furnitureButtons, button => button == null))
             { Debug.LogError("Build HUD references are incomplete.", this); enabled = false; return; }
             placement.GetBuildableFurniture(definitions);
             if (iconShader != null)
@@ -61,6 +65,7 @@ namespace MaterialCityTycoon.Building
             if (structureCategoryButton != null) structureCategoryButton.onClick.AddListener(() => { structureCategory = true; Refresh(); });
             if (wallButton != null) wallButton.onClick.AddListener(() => { placement.SelectWallTool(); Refresh(); });
             if (doorButton != null) doorButton.onClick.AddListener(() => { placement.SelectDoorTool(); Refresh(); });
+            if (floorButton != null) floorButton.onClick.AddListener(() => { placement.SelectFloorTool(); Refresh(); });
             for (int i = 0; i < furnitureButtons.Length; i++)
             {
                 int index = i;
@@ -73,16 +78,16 @@ namespace MaterialCityTycoon.Building
 
         private void Update()
         {
-            if ((previousWall || previousDoor) && !placement.IsStructureToolActive && placement.IsPlacementModeActive)
+            if ((previousWall || previousDoor || previousFloor) && !placement.IsStructureToolActive && placement.IsPlacementModeActive)
             {
                 structureCategory = false;
-                storageCategory = placement.SelectedFurnitureDefinition != null && placement.SelectedFurnitureDefinition.FurnitureTypeId == Ids[3];
+                storageCategory = placement.SelectedFurnitureDefinition != null && placement.SelectedFurnitureDefinition.FurnitureTypeId == FurnitureTypeIds.IndustrialStorageShelf;
             }
             if (!placement.IsWallModeActive && previousSelection != placement.SelectedFurnitureDefinition && placement.SelectedFurnitureDefinition != null)
-                storageCategory = placement.SelectedFurnitureDefinition.FurnitureTypeId == Ids[3];
+                storageCategory = placement.SelectedFurnitureDefinition.FurnitureTypeId == FurnitureTypeIds.IndustrialStorageShelf;
             if (previousActive != placement.IsPlacementModeActive || previousSelection != placement.SelectedFurnitureDefinition
                 || previousMoving != placement.IsMovingFurnitureActive || previousWall != placement.IsWallModeActive
-                || previousDoor != placement.IsDoorToolActive) Refresh();
+                || previousDoor != placement.IsDoorToolActive || previousFloor != placement.IsFloorToolActive) Refresh();
         }
 
         private void OnDestroy()
@@ -106,6 +111,7 @@ namespace MaterialCityTycoon.Building
             previousMoving = placement.IsMovingFurnitureActive;
             previousWall = placement.IsWallModeActive;
             previousDoor = placement.IsDoorToolActive;
+            previousFloor = placement.IsFloorToolActive;
             catalog.SetActive(previousActive);
             buildButton.image.color = previousActive ? Selected : new Color(0.10f, 0.11f, 0.13f, 0.97f);
             displayCategoryButton.image.color = !structureCategory && !storageCategory ? Selected : Normal;
@@ -113,10 +119,11 @@ namespace MaterialCityTycoon.Building
             if (structureCategoryButton != null) structureCategoryButton.image.color = structureCategory ? Selected : Normal;
             if (wallButton != null) { wallButton.gameObject.SetActive(structureCategory); wallButton.image.color = previousWall ? Selected : Normal; }
             if (doorButton != null) { doorButton.gameObject.SetActive(structureCategory); doorButton.image.color = previousDoor ? Selected : Normal; }
+            if (floorButton != null) { floorButton.gameObject.SetActive(structureCategory); floorButton.image.color = previousFloor ? Selected : Normal; }
             for (int i = 0; i < furnitureButtons.Length; i++)
             {
                 Button button = furnitureButtons[i];
-                button.gameObject.SetActive(!structureCategory && (storageCategory ? i == 3 : i < 3));
+                button.gameObject.SetActive(!structureCategory && (storageCategory ? Ids[i] == FurnitureTypeIds.IndustrialStorageShelf : Ids[i] != FurnitureTypeIds.IndustrialStorageShelf));
                 button.interactable = items[i] != null && !previousMoving;
                 button.image.color = !placement.IsStructureToolActive && items[i] != null && items[i] == previousSelection ? Selected : Normal;
             }

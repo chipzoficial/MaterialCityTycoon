@@ -1,0 +1,44 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: eff17c26142135b4e952757f996f8e63, type: 3}
+  m_Name: DEF_PalletBagDisplay
+  m_EditorClassIdentifier: Assembly-CSharp::MaterialCityTycoon.Building.FurnitureDefinition
+  furnitureTypeId: pallet_bag_display
+  displayName: Expositor de Sacarias
+  prefab: {fileID: 8935465262554382622, guid: 7394680d3c472084f9fd0cfceed65760, type: 3}
+  width: 2
+  depth: 1
+  displaySlots:
+  - slotId: pallet_bags
+    displayName: Sacarias
+    allowedDisplayModes: 00000000i
+    localDisplayPosition: {x: 0, y: 0, z: 0}
+    capacityUnits: 40
+    palletBagDisplayLayout:
+      surfaceSize: {x: 1.2, y: 1}
+      surfaceHeight: 0.15
+      spacing: 0
+  accessCellOffsets:
+  - {x: 0, y: -1}
+  - {x: 1, y: -1}
+  - {x: 0, y: 1}
+  - {x: 1, y: 1}
+  accessGroups:
+  - groupId: front
+    cellOffsets:
+    - {x: 0, y: -1}
+    - {x: 1, y: -1}
+  - groupId: back
+    cellOffsets:
+    - {x: 0, y: 1}
+    - {x: 1, y: 1}
+  storageCapacity: {fileID: 0}

@@ -35,15 +35,19 @@ namespace MaterialCityTycoon.EditorTools
             {
                 SerializedObject existing = new(huds[0]);
                 SerializedProperty buttons = existing.FindProperty("furnitureButtons");
-                if (existing.FindProperty("catalog").objectReferenceValue == null || buttons.arraySize != 4
+                if (existing.FindProperty("catalog").objectReferenceValue == null
                     || existing.FindProperty("buildButton").objectReferenceValue == null || existing.FindProperty("closeButton").objectReferenceValue == null
-                    || existing.FindProperty("displayCategoryButton").objectReferenceValue == null || existing.FindProperty("storageCategoryButton").objectReferenceValue == null
-                    || Enumerable.Range(0, 4).Any(i => buttons.GetArrayElementAtIndex(i).objectReferenceValue == null))
+                    || existing.FindProperty("displayCategoryButton").objectReferenceValue == null || existing.FindProperty("storageCategoryButton").objectReferenceValue == null)
                 { Debug.LogError("The existing Build HUD has incomplete references; repair it before configuring.", huds[0]); return; }
+                GameObject panelObject = existing.FindProperty("catalog").objectReferenceValue as GameObject;
+                if (!TryEnsureFurnitureButtons(panelObject, font, out Button[] configuredFurniture))
+                { Debug.LogError("The existing Build HUD cannot create its furniture buttons.", huds[0]); return; }
                 EnsureEventSystem(systems, scene);
                 Undo.RecordObject(huds[0], "Configure Build HUD");
                 existing.FindProperty("placement").objectReferenceValue = controllers[0];
                 existing.FindProperty("iconShader").objectReferenceValue = iconShader;
+                buttons.arraySize = configuredFurniture.Length;
+                for (int i = 0; i < configuredFurniture.Length; i++) buttons.GetArrayElementAtIndex(i).objectReferenceValue = configuredFurniture[i];
                 existing.ApplyModifiedProperties();
                 EditorSceneManager.MarkSceneDirty(scene);
                 Debug.Log("Build HUD is already configured. Save the scene manually.", huds[0]);
@@ -72,16 +76,16 @@ namespace MaterialCityTycoon.EditorTools
             Button build = Button("BuildButton", root.transform, font, "Construir", hammer, new Vector2(24, 24), new Vector2(164, 52));
             build.image.color = Surface;
             GameObject panel = Ui("BuildCatalog", root.transform);
-            SetRect((RectTransform)panel.transform, new Vector2(24, 88), new Vector2(370, 330));
+            SetRect((RectTransform)panel.transform, new Vector2(24, 88), new Vector2(370, 435));
             Undo.AddComponent<Image>(panel).color = Surface;
             Text title = Label("Title", panel.transform, font, "Construir", 24, TextAnchor.MiddleLeft);
-            SetRect(title.rectTransform, new Vector2(18, 276), new Vector2(270, 40));
-            Button closeButton = Button("CloseButton", panel.transform, font, "", close, new Vector2(314, 276), new Vector2(40, 40));
-            Button display = Button("DisplayCategory", panel.transform, font, "Exposição", grid, new Vector2(18, 218), new Vector2(160, 44));
-            Button storage = Button("StorageCategory", panel.transform, font, "Depósito", warehouse, new Vector2(185, 218), new Vector2(165, 44));
-            Button[] furniture = new Button[4];
-            for (int i = 0; i < 4; i++) furniture[i] = Button("Furniture" + i, panel.transform, font, "", null,
-                new Vector2(18, 159 - (i == 3 ? 0 : i) * 51), new Vector2(332, 44));
+            SetRect(title.rectTransform, new Vector2(18, 381), new Vector2(270, 40));
+            Button closeButton = Button("CloseButton", panel.transform, font, "", close, new Vector2(314, 381), new Vector2(40, 40));
+            Button display = Button("DisplayCategory", panel.transform, font, "Exposição", grid, new Vector2(18, 323), new Vector2(160, 44));
+            Button storage = Button("StorageCategory", panel.transform, font, "Depósito", warehouse, new Vector2(185, 323), new Vector2(165, 44));
+            Button[] furniture = new Button[6];
+            for (int i = 0; i < furniture.Length; i++) furniture[i] = Button("Furniture" + i, panel.transform, font, "", null,
+                new Vector2(18, 264 - (i < 5 ? i : 0) * 51), new Vector2(332, 44));
             SerializedObject data = new(hud);
             data.FindProperty("placement").objectReferenceValue = controllers[0];
             data.FindProperty("iconShader").objectReferenceValue = iconShader;
@@ -90,8 +94,8 @@ namespace MaterialCityTycoon.EditorTools
             data.FindProperty("closeButton").objectReferenceValue = closeButton;
             data.FindProperty("displayCategoryButton").objectReferenceValue = display;
             data.FindProperty("storageCategoryButton").objectReferenceValue = storage;
-            SerializedProperty list = data.FindProperty("furnitureButtons"); list.arraySize = 4;
-            for (int i = 0; i < 4; i++) list.GetArrayElementAtIndex(i).objectReferenceValue = furniture[i];
+            SerializedProperty list = data.FindProperty("furnitureButtons"); list.arraySize = furniture.Length;
+            for (int i = 0; i < furniture.Length; i++) list.GetArrayElementAtIndex(i).objectReferenceValue = furniture[i];
             data.ApplyModifiedPropertiesWithoutUndo();
             panel.SetActive(false);
             EditorSceneManager.MarkSceneDirty(scene);
@@ -108,6 +112,48 @@ namespace MaterialCityTycoon.EditorTools
             }
             else if (systems[0].GetComponent<InputSystemUIInputModule>() == null)
                 Undo.AddComponent<InputSystemUIInputModule>(systems[0].gameObject);
+        }
+
+        private static bool TryEnsureFurnitureButtons(GameObject panel, Font font, out Button[] furniture)
+        {
+            furniture = null;
+            if (panel == null || panel.GetComponent<RectTransform>() == null)
+            {
+                return false;
+            }
+
+            SetRect(panel.GetComponent<RectTransform>(), new Vector2(24, 88), new Vector2(370, 435));
+            Transform title = panel.transform.Find("Title");
+            Transform close = panel.transform.Find("CloseButton");
+            Transform display = panel.transform.Find("DisplayCategory");
+            Transform storage = panel.transform.Find("StorageCategory");
+            if (title == null || close == null || display == null || storage == null)
+            {
+                return false;
+            }
+
+            SetRect(title.GetComponent<RectTransform>(), new Vector2(18, 381), new Vector2(270, 40));
+            SetRect(close.GetComponent<RectTransform>(), new Vector2(314, 381), new Vector2(40, 40));
+            SetRect(display.GetComponent<RectTransform>(), new Vector2(18, 323), new Vector2(160, 44));
+            SetRect(storage.GetComponent<RectTransform>(), new Vector2(185, 323), new Vector2(165, 44));
+            furniture = new Button[6];
+            for (int index = 0; index < furniture.Length; index++)
+            {
+                Transform existing = panel.transform.Find("Furniture" + index);
+                furniture[index] = existing == null
+                    ? Button("Furniture" + index, panel.transform, font, string.Empty, null,
+                        new Vector2(18, 264 - (index < 5 ? index : 0) * 51), new Vector2(332, 44))
+                    : existing.GetComponent<Button>();
+                if (furniture[index] == null)
+                {
+                    return false;
+                }
+
+                SetRect(furniture[index].GetComponent<RectTransform>(),
+                    new Vector2(18, 264 - (index < 5 ? index : 0) * 51), new Vector2(332, 44));
+            }
+
+            return true;
         }
 
         private static Sprite Icon(string name) => AssetDatabase.LoadAllAssetsAtPath($"Assets/_Game/Art/UI/Icons/{name}.png").OfType<Sprite>().FirstOrDefault();

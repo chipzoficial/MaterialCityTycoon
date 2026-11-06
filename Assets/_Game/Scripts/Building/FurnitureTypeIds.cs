@@ -7,5 +7,7 @@ namespace MaterialCityTycoon.Building
         public const string ToolDisplay = "tool_display";
         public const string PartsBinRack = "parts_bin_rack";
         public const string IndustrialStorageShelf = "industrial_storage_shelf";
+        public const string PalletBagDisplay = "pallet_bag_display";
+        public const string DoubleSidedGondola = "double_sided_gondola";
     }
 }

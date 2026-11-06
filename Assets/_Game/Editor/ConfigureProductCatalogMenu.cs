@@ -12,6 +12,8 @@ namespace MaterialCityTycoon.EditorTools
     public static class ConfigureProductCatalogMenu
     {
         private const string ProductDefinitionsFolder = "Assets/_Game/ScriptableObjects/Products";
+        private const string ProvisionalPrefabsFolder = "Assets/_Game/Prefabs/Products/Provisional";
+        private const string ProvisionalMaterialsFolder = "Assets/_Game/Art/Materials/Products/Provisional";
 
         private static readonly ProductConfiguration[] ProductDefinitions =
         {
@@ -35,6 +37,58 @@ namespace MaterialCityTycoon.EditorTools
                 "Parafusos",
                 "fasteners",
                 ProductSellingUnit.Unit,
+                ProductDisplayMode.Bin),
+            new(
+                "DEF_Cimento50kg",
+                "cimento_50kg",
+                "Cimento 50 kg",
+                "construction_materials",
+                ProductSellingUnit.Bag,
+                3500,
+                new ProductVisualConfiguration(
+                    "PF_Cimento50kg_Provisional",
+                    PrimitiveType.Cube,
+                    new Vector3(0.42f, 0.12f, 0.60f),
+                    new Color(0.52f, 0.52f, 0.48f, 1f)),
+                ProductDisplayMode.Stack),
+            new(
+                "DEF_TintaAcrilica18L",
+                "tinta_acrilica_18l",
+                "Tinta acrílica 18 L",
+                "paints",
+                ProductSellingUnit.Package,
+                15990,
+                new ProductVisualConfiguration(
+                    "PF_TintaAcrilica18L_Provisional",
+                    PrimitiveType.Cylinder,
+                    new Vector3(0.19f, 0.17f, 0.19f),
+                    new Color(0.18f, 0.42f, 0.78f, 1f)),
+                ProductDisplayMode.Stack),
+            new(
+                "DEF_Trena5m",
+                "trena_5m",
+                "Trena 5 m",
+                "hand_tools",
+                ProductSellingUnit.Unit,
+                2990,
+                new ProductVisualConfiguration(
+                    "PF_Trena5m_Provisional",
+                    PrimitiveType.Cube,
+                    new Vector3(0.18f, 0.06f, 0.13f),
+                    new Color(0.98f, 0.72f, 0.12f, 1f)),
+                ProductDisplayMode.Hang),
+            new(
+                "DEF_BuchasPlasticasN8",
+                "buchas_plasticas_n8",
+                "Buchas plásticas nº 8",
+                "fasteners",
+                ProductSellingUnit.Package,
+                890,
+                new ProductVisualConfiguration(
+                    "PF_BuchasPlasticasN8_Provisional",
+                    PrimitiveType.Cube,
+                    new Vector3(0.14f, 0.07f, 0.09f),
+                    new Color(0.92f, 0.84f, 0.18f, 1f)),
                 ProductDisplayMode.Bin)
         };
 
@@ -53,6 +107,8 @@ namespace MaterialCityTycoon.EditorTools
             }
 
             EnsureAssetFolder(ProductDefinitionsFolder);
+            EnsureAssetFolder(ProvisionalPrefabsFolder);
+            EnsureAssetFolder(ProvisionalMaterialsFolder);
 
             foreach (ProductConfiguration configuration in ProductDefinitions)
             {
@@ -61,7 +117,7 @@ namespace MaterialCityTycoon.EditorTools
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            Debug.Log("Product definitions configured: Argamassa, Martelo and Parafusos.");
+            Debug.Log($"Product definitions configured: {ProductDefinitions.Length} catalog entries.");
         }
 
         private static bool ValidateConfigurations()
@@ -72,7 +128,8 @@ namespace MaterialCityTycoon.EditorTools
             {
                 if (string.IsNullOrWhiteSpace(configuration.ProductId)
                     || string.IsNullOrWhiteSpace(configuration.AssetName)
-                    || configuration.AllowedDisplayModes.Length == 0)
+                    || configuration.AllowedDisplayModes.Length == 0
+                    || configuration.InitialSalePriceCents is < 0)
                 {
                     Debug.LogError("An initial product definition has an invalid configuration.");
                     return false;
@@ -107,6 +164,25 @@ namespace MaterialCityTycoon.EditorTools
                 if (mainAsset != null && mainAsset is not ProductDefinition)
                 {
                     Debug.LogError($"'{targetPath}' already exists and is not a ProductDefinition.");
+                    return false;
+                }
+
+                if (configuration.Visual == null)
+                {
+                    continue;
+                }
+
+                UnityEngine.Object prefabAsset = AssetDatabase.LoadMainAssetAtPath(GetPrefabPath(configuration.Visual));
+                if (prefabAsset != null && prefabAsset is not GameObject)
+                {
+                    Debug.LogError($"'{GetPrefabPath(configuration.Visual)}' already exists and is not a prefab.");
+                    return false;
+                }
+
+                UnityEngine.Object materialAsset = AssetDatabase.LoadMainAssetAtPath(GetMaterialPath(configuration.Visual));
+                if (materialAsset != null && materialAsset is not Material)
+                {
+                    Debug.LogError($"'{GetMaterialPath(configuration.Visual)}' already exists and is not a material.");
                     return false;
                 }
             }
@@ -179,6 +255,44 @@ namespace MaterialCityTycoon.EditorTools
                 allowedDisplayModes.GetArrayElementAtIndex(index).enumValueIndex = (int)configuration.AllowedDisplayModes[index];
             }
 
+            if (configuration.InitialSalePriceCents.HasValue)
+            {
+                SerializedProperty salePriceCents = serializedDefinition.FindProperty("salePriceCents");
+                if (salePriceCents == null)
+                {
+                    Debug.LogError("ProductDefinition sale price field does not match the editor configuration tool.", definition);
+                    return;
+                }
+
+                salePriceCents.longValue = configuration.InitialSalePriceCents.Value;
+            }
+
+            if (configuration.Visual != null)
+            {
+                if (!TryGetOrCreateProvisionalVisual(configuration.Visual, out GameObject displayPrefab))
+                {
+                    return;
+                }
+
+                SerializedProperty displayPrefabProperty = serializedDefinition.FindProperty("displayPrefab");
+                if (displayPrefabProperty == null)
+                {
+                    Debug.LogError("ProductDefinition display prefab field does not match the editor configuration tool.", definition);
+                    return;
+                }
+
+                if (displayPrefabProperty.objectReferenceValue != null
+                    && displayPrefabProperty.objectReferenceValue != displayPrefab)
+                {
+                    Debug.LogError(
+                        $"{configuration.DisplayName} already references a different display prefab; its existing reference was preserved.",
+                        definition);
+                    return;
+                }
+
+                displayPrefabProperty.objectReferenceValue = displayPrefab;
+            }
+
             serializedDefinition.ApplyModifiedProperties();
             EditorUtility.SetDirty(definition);
         }
@@ -213,6 +327,63 @@ namespace MaterialCityTycoon.EditorTools
         private static string GetAssetPath(ProductConfiguration configuration)
         {
             return $"{ProductDefinitionsFolder}/{configuration.AssetName}.asset";
+        }
+
+        private static string GetPrefabPath(ProductVisualConfiguration visual)
+        {
+            return $"{ProvisionalPrefabsFolder}/{visual.PrefabName}.prefab";
+        }
+
+        private static string GetMaterialPath(ProductVisualConfiguration visual)
+        {
+            return $"{ProvisionalMaterialsFolder}/MAT_{visual.PrefabName}.mat";
+        }
+
+        private static bool TryGetOrCreateProvisionalVisual(ProductVisualConfiguration visual, out GameObject prefab)
+        {
+            prefab = AssetDatabase.LoadAssetAtPath<GameObject>(GetPrefabPath(visual));
+            Material material = AssetDatabase.LoadAssetAtPath<Material>(GetMaterialPath(visual));
+            if (material == null)
+            {
+                Shader shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                if (shader == null)
+                {
+                    Debug.LogError("No supported shader was found for the provisional product material.");
+                    return false;
+                }
+
+                material = new Material(shader) { name = $"MAT_{visual.PrefabName}" };
+                AssetDatabase.CreateAsset(material, GetMaterialPath(visual));
+            }
+
+            if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", visual.Color);
+            else if (material.HasProperty("_Color")) material.SetColor("_Color", visual.Color);
+            EditorUtility.SetDirty(material);
+
+            if (prefab != null)
+            {
+                return prefab.GetComponentsInChildren<MeshRenderer>(true).Length > 0;
+            }
+
+            GameObject source = GameObject.CreatePrimitive(visual.Primitive);
+            source.name = visual.PrefabName;
+            source.transform.localScale = visual.LocalScale;
+            foreach (Collider collider in source.GetComponentsInChildren<Collider>(true))
+            {
+                UnityEngine.Object.DestroyImmediate(collider);
+            }
+
+            MeshRenderer renderer = source.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            prefab = PrefabUtility.SaveAsPrefabAsset(source, GetPrefabPath(visual));
+            UnityEngine.Object.DestroyImmediate(source);
+            if (prefab == null)
+            {
+                Debug.LogError($"Could not create provisional product prefab '{GetPrefabPath(visual)}'.");
+                return false;
+            }
+
+            return true;
         }
 
         private static void EnsureAssetFolder(string assetFolder)
@@ -254,6 +425,23 @@ namespace MaterialCityTycoon.EditorTools
                 CategoryId = categoryId;
                 SellingUnit = sellingUnit;
                 AllowedDisplayModes = allowedDisplayModes;
+                InitialSalePriceCents = null;
+                Visual = null;
+            }
+
+            public ProductConfiguration(
+                string assetName,
+                string productId,
+                string displayName,
+                string categoryId,
+                ProductSellingUnit sellingUnit,
+                long initialSalePriceCents,
+                ProductVisualConfiguration visual,
+                params ProductDisplayMode[] allowedDisplayModes)
+                : this(assetName, productId, displayName, categoryId, sellingUnit, allowedDisplayModes)
+            {
+                InitialSalePriceCents = initialSalePriceCents;
+                Visual = visual;
             }
 
             public string AssetName { get; }
@@ -262,6 +450,24 @@ namespace MaterialCityTycoon.EditorTools
             public string CategoryId { get; }
             public ProductSellingUnit SellingUnit { get; }
             public ProductDisplayMode[] AllowedDisplayModes { get; }
+            public long? InitialSalePriceCents { get; }
+            public ProductVisualConfiguration Visual { get; }
+        }
+
+        private sealed class ProductVisualConfiguration
+        {
+            public ProductVisualConfiguration(string prefabName, PrimitiveType primitive, Vector3 localScale, Color color)
+            {
+                PrefabName = prefabName;
+                Primitive = primitive;
+                LocalScale = localScale;
+                Color = color;
+            }
+
+            public string PrefabName { get; }
+            public PrimitiveType Primitive { get; }
+            public Vector3 LocalScale { get; }
+            public Color Color { get; }
         }
     }
 

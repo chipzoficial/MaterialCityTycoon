@@ -613,6 +613,78 @@ namespace MaterialCityTycoon.EditorTests
             Assert.That(walls.Contains(west) && walls.Contains(east) && walls.Contains(diagonal), Is.True);
         }
 
+        [TestCase(WallEdgeOrientation.AlongX, 4, 5, WallEdgeOrientation.AlongZ, 5, 5)]
+        [TestCase(WallEdgeOrientation.AlongX, 4, 5, WallEdgeOrientation.DiagonalAscending, 5, 5)]
+        [TestCase(WallEdgeOrientation.AlongX, 4, 5, WallEdgeOrientation.DiagonalDescending, 4, 5)]
+        [TestCase(WallEdgeOrientation.DiagonalAscending, 5, 5, WallEdgeOrientation.DiagonalDescending, 5, 4)]
+        public void TwoNonCollinearWallsCreateAThinSolidJunctionFromTheirSharedEndpoint(
+            WallEdgeOrientation firstOrientation, int firstX, int firstZ,
+            WallEdgeOrientation secondOrientation, int secondX, int secondZ)
+        {
+            WallConstructionController controller = owner.AddComponent<WallConstructionController>();
+            const BindingFlags privateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
+            typeof(WallConstructionController).GetField("grid", privateInstance).SetValue(controller, grid);
+            typeof(WallConstructionController).GetField("edges", privateInstance).SetValue(controller, walls);
+            MethodInfo create = typeof(WallConstructionController).GetMethod("CreateWallVisual", privateInstance);
+            MethodInfo refresh = typeof(WallConstructionController).GetMethod("RefreshFinalJunctionVisuals", privateInstance);
+            MethodInfo showPreview = typeof(WallConstructionController).GetMethod("ShowPreviewJunctionVisuals", privateInstance);
+            var visuals = (Dictionary<WallEdge, GameObject>)typeof(WallConstructionController)
+                .GetField("visuals", privateInstance).GetValue(controller);
+            var joints = (Dictionary<Vector2Int, GameObject>)typeof(WallConstructionController)
+                .GetField("jointVisuals", privateInstance).GetValue(controller);
+            var previews = (List<GameObject>)typeof(WallConstructionController)
+                .GetField("previewJointVisuals", privateInstance).GetValue(controller);
+            WallEdge first = new(firstX, firstZ, firstOrientation);
+            WallEdge second = new(secondX, secondZ, secondOrientation);
+
+            WallEdges.GetGridEndpoints(first, out Vector2Int firstStart, out Vector2Int firstEnd);
+            WallEdges.GetGridEndpoints(second, out Vector2Int secondStart, out Vector2Int secondEnd);
+            Vector2Int vertex = firstStart == secondStart || firstStart == secondEnd ? firstStart : firstEnd;
+            Assert.That(WallEdges.AreCollinearAtVertex(vertex, first, second), Is.False);
+            showPreview.Invoke(controller, new object[] { new[] { first, second }, 0f, null });
+            Assert.That(previews, Has.Count.EqualTo(1));
+            Assert.That(previews[0].activeSelf, Is.True);
+            Vector3[] previewVertices = previews[0].GetComponent<MeshFilter>().sharedMesh.vertices;
+            int[] previewTriangles = previews[0].GetComponent<MeshFilter>().sharedMesh.triangles;
+            Assert.That(walls.TryAddRange(new[] { first, second }), Is.True);
+            visuals.Add(first, (GameObject)create.Invoke(controller, new object[] { first, 0f, null, null, false }));
+            visuals.Add(second, (GameObject)create.Invoke(controller, new object[] { second, 0f, null, null, false }));
+            refresh.Invoke(controller, new object[] { new[] { first, second }, 0f });
+
+            Assert.That(joints.TryGetValue(vertex, out GameObject joint), Is.True);
+            Mesh mesh = joint.GetComponent<MeshFilter>().sharedMesh;
+            Assert.That(mesh.bounds.size.y, Is.EqualTo(3f).Within(0.0001f));
+            Assert.That(mesh.bounds.size.x, Is.LessThanOrEqualTo(0.15f + 0.0001f));
+            Assert.That(mesh.bounds.size.z, Is.LessThanOrEqualTo(0.15f + 0.0001f));
+            Assert.That(mesh.triangles, Is.Not.Empty);
+            Assert.That(joint.GetComponent<MeshCollider>().sharedMesh, Is.SameAs(mesh));
+            CollectionAssert.AreEqual(previewVertices, mesh.vertices);
+            CollectionAssert.AreEqual(previewTriangles, mesh.triangles);
+        }
+
+        [TestCase(WallEdgeOrientation.AlongX, 4, 5, WallEdgeOrientation.AlongX, 5, 5)]
+        [TestCase(WallEdgeOrientation.DiagonalAscending, 4, 4, WallEdgeOrientation.DiagonalAscending, 5, 5)]
+        public void TwoCollinearWallsDoNotCreateAnUnnecessaryJunction(
+            WallEdgeOrientation firstOrientation, int firstX, int firstZ,
+            WallEdgeOrientation secondOrientation, int secondX, int secondZ)
+        {
+            WallConstructionController controller = owner.AddComponent<WallConstructionController>();
+            const BindingFlags privateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
+            typeof(WallConstructionController).GetField("grid", privateInstance).SetValue(controller, grid);
+            typeof(WallConstructionController).GetField("edges", privateInstance).SetValue(controller, walls);
+            MethodInfo refresh = typeof(WallConstructionController).GetMethod("RefreshFinalJunctionVisuals", privateInstance);
+            var joints = (Dictionary<Vector2Int, GameObject>)typeof(WallConstructionController)
+                .GetField("jointVisuals", privateInstance).GetValue(controller);
+            WallEdge first = new(firstX, firstZ, firstOrientation);
+            WallEdge second = new(secondX, secondZ, secondOrientation);
+            WallEdges.GetGridEndpoints(first, out _, out Vector2Int vertex);
+
+            Assert.That(WallEdges.AreCollinearAtVertex(vertex, first, second), Is.True);
+            Assert.That(walls.TryAddRange(new[] { first, second }), Is.True);
+            refresh.Invoke(controller, new object[] { new[] { first, second }, 0f });
+            Assert.That(joints.ContainsKey(vertex), Is.False);
+        }
+
         [TestCase(WallEdgeOrientation.AlongX, 4, 5, WallEdgeOrientation.DiagonalAscending, 5, 5)]
         [TestCase(WallEdgeOrientation.AlongX, 4, 5, WallEdgeOrientation.DiagonalDescending, 4, 5)]
         [TestCase(WallEdgeOrientation.DiagonalAscending, 5, 5, WallEdgeOrientation.DiagonalDescending, 5, 4)]
@@ -964,10 +1036,12 @@ namespace MaterialCityTycoon.EditorTests
             Assert.That(walls.Remove(diagonal), Is.True);
             refresh.Invoke(controller, new object[] { new[] { diagonal }, 0f });
 
-            Assert.That(joints.ContainsKey(vertex), Is.False);
+            Assert.That(joints.ContainsKey(vertex), Is.True);
             Assert.That(walls.Contains(west) && walls.Contains(north), Is.True);
             Assert.That(visuals.ContainsKey(west) && visuals.ContainsKey(north), Is.True);
-            Assert.That(originalConnector == null, Is.True);
+            Assert.That(joints[vertex], Is.SameAs(originalConnector));
+            Assert.That(joints[vertex].GetComponent<MeshCollider>().sharedMesh,
+                Is.SameAs(joints[vertex].GetComponent<MeshFilter>().sharedMesh));
         }
 
         [Test]

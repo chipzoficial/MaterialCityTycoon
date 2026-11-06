@@ -162,6 +162,26 @@ namespace MaterialCityTycoon.Building
             }
         }
 
+        /// <summary>
+        /// Reports whether two segments leave the same vertex in opposite directions on one
+        /// straight line. The calculation uses the logical endpoints, so it is identical for
+        /// orthogonal and diagonal edges.
+        /// </summary>
+        public static bool AreCollinearAtVertex(Vector2Int vertex, WallEdge first, WallEdge second)
+        {
+            GetGridEndpoints(first, out Vector2Int firstStart, out Vector2Int firstEnd);
+            GetGridEndpoints(second, out Vector2Int secondStart, out Vector2Int secondEnd);
+            if ((firstStart != vertex && firstEnd != vertex)
+                || (secondStart != vertex && secondEnd != vertex))
+            {
+                return false;
+            }
+
+            Vector2Int firstDirection = firstStart == vertex ? firstEnd - vertex : firstStart - vertex;
+            Vector2Int secondDirection = secondStart == vertex ? secondEnd - vertex : secondStart - vertex;
+            return firstDirection.x * secondDirection.y - firstDirection.y * secondDirection.x == 0;
+        }
+
         private bool IsIncidentEdgePresent(WallEdge edge, IReadOnlyList<WallEdge> candidates)
         {
             return IsInside(edge) && (Contains(edge) || IncludesCandidate(candidates, edge));

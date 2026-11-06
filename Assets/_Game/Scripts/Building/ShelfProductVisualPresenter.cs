@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace MaterialCityTycoon.Building
 {
-    /// <summary>Shows the mortar units exposed by one constructed commercial shelf.</summary>
+    /// <summary>Shows compatible stack products exposed by one constructed commercial shelf.</summary>
     public sealed class ShelfProductVisualPresenter : MonoBehaviour
     {
         public static bool VerboseDiagnostics { get; set; }
@@ -69,11 +69,10 @@ namespace MaterialCityTycoon.Building
 
         private void UpdateSlot(SlotVisuals slot)
         {
-            bool hasMortar = placementController.TryGetAssignedProductForDisplaySlot(
-                    furnitureId, slot.definition.SlotId, out ProductDefinition product)
-                && product.ProductId == "argamassa";
-            GameObject prefab = hasMortar ? product.DisplayPrefab : null;
-            int quantity = hasMortar
+            bool hasAssignedProduct = placementController.TryGetAssignedProductForDisplaySlot(
+                furnitureId, slot.definition.SlotId, out ProductDefinition product);
+            GameObject prefab = hasAssignedProduct ? product.DisplayPrefab : null;
+            int quantity = hasAssignedProduct
                 ? placementController.GetDisplayedQuantity(furnitureId, slot.definition.SlotId)
                 : 0;
 
@@ -91,7 +90,7 @@ namespace MaterialCityTycoon.Building
 
             if (quantity > 0 && prefab == null && !slot.missingPrefabWarningShown)
             {
-                Debug.LogWarning("Argamassa has no display prefab. Run Tools > Material City Tycoon > Configure Mortar Display Visual.", this);
+                Debug.LogWarning($"Product '{product.DisplayName}' has no display prefab.", this);
                 slot.missingPrefabWarningShown = true;
             }
             else if (quantity == 0 || prefab != null)
@@ -221,10 +220,10 @@ namespace MaterialCityTycoon.Building
             }
 
             if (VerboseDiagnostics)
-                Debug.Log($"Shelf '{furnitureId}', slot '{slot.definition.SlotId}': visual stacks fit {slot.positions.Count} mortar bag(s).", this);
+                Debug.Log($"Shelf '{furnitureId}', slot '{slot.definition.SlotId}': visual stacks fit {slot.positions.Count} product unit(s).", this);
             if (slot.positions.Count < StackCount * StackLayers)
             {
-                Debug.LogWarning($"Shelf slot '{slot.definition.SlotId}' cannot fit three stacks of four bags without overlapping the shelf. The logical capacity is unchanged.", this);
+                Debug.LogWarning($"Shelf slot '{slot.definition.SlotId}' cannot fit all product units in the configured visual arrangement. The logical capacity is unchanged.", this);
             }
         }
 

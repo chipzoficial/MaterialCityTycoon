@@ -547,15 +547,18 @@ namespace MaterialCityTycoon.Building
 
         private bool ShouldCreateJunctionConnector(Vector2Int vertex, IReadOnlyList<WallEdge> candidates)
         {
-            if (edges.GetConnectionCountAtVertex(vertex, candidates) < 3) return false;
-
             edges.GetIncidentEdgesAtVertex(vertex, candidates, incidentEdges);
+            if (incidentEdges.Count < 2) return false;
             foreach (WallEdge edge in incidentEdges)
             {
                 if (edges.IsDoor(edge)) return false;
             }
 
-            return true;
+            // Three or more branches already require the existing junction fill. With exactly
+            // two segments, only an angle has an exposed pair of end faces; a straight line is
+            // continuous on its own and must not receive an unnecessary connector.
+            return incidentEdges.Count > 2
+                || !WallEdges.AreCollinearAtVertex(vertex, incidentEdges[0], incidentEdges[1]);
         }
 
         private void ShowPreviewJunctionVisuals(IReadOnlyList<WallEdge> candidates, float baseHeight, Material material)

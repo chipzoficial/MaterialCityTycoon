@@ -187,6 +187,7 @@ namespace MaterialCityTycoon.Building
         [SerializeField] private ProductDisplayMode[] allowedDisplayModes = Array.Empty<ProductDisplayMode>();
         [SerializeField] private Vector3 localDisplayPosition;
         [SerializeField, Min(0)] private int capacityUnits;
+        [SerializeField] private PalletBagDisplayLayoutDefinition palletBagDisplayLayout = new();
 
         public string SlotId => slotId;
         public string DisplayName => displayName;
@@ -194,6 +195,7 @@ namespace MaterialCityTycoon.Building
         public Vector3 LocalDisplayPosition => localDisplayPosition;
         public int CapacityUnits => capacityUnits;
         public bool HasConfiguredCapacity => capacityUnits > 0;
+        public PalletBagDisplayLayoutDefinition PalletBagDisplayLayout => palletBagDisplayLayout;
 
         public bool IsValid(out string validationMessage)
         {
@@ -243,6 +245,35 @@ namespace MaterialCityTycoon.Building
         {
             allowedDisplayModes ??= Array.Empty<ProductDisplayMode>();
             capacityUnits = Mathf.Max(0, capacityUnits);
+            palletBagDisplayLayout ??= new PalletBagDisplayLayoutDefinition();
         }
+    }
+
+    /// <summary>
+    /// Optional physical surface data for a pallet slot. It configures presentation only;
+    /// logical capacity remains owned by <see cref="DisplaySlotDefinition"/>.
+    /// </summary>
+    [Serializable]
+    public sealed class PalletBagDisplayLayoutDefinition
+    {
+        [SerializeField] private Vector2 surfaceSize;
+        [SerializeField, Min(0f)] private float surfaceHeight;
+        [SerializeField, Min(0f)] private float spacing;
+
+        public PalletBagDisplayLayoutDefinition()
+        {
+        }
+
+        public PalletBagDisplayLayoutDefinition(Vector2 surfaceSize, float surfaceHeight, float spacing)
+        {
+            this.surfaceSize = surfaceSize;
+            this.surfaceHeight = surfaceHeight;
+            this.spacing = spacing;
+        }
+
+        public Vector2 SurfaceSize => surfaceSize;
+        public float SurfaceHeight => surfaceHeight;
+        public float Spacing => spacing;
+        public bool IsConfigured => surfaceSize.x > 0f && surfaceSize.y > 0f && surfaceHeight >= 0f && spacing >= 0f;
     }
 }
